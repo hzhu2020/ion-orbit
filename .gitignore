@@ -1,1 +1,4 @@
 *.bp
+*.py.swp
+*.pdf
+__pycache__
