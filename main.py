@@ -3,31 +3,21 @@ import math
 import setup
 import myinterp
 import orbit
+from parameters import *
 import variables as var
 
-#parameters and initialize some global variables
-qi=1.60217662E-19
-mi=2*1.67262192369E-27 
-f0_vp_max=4.0
-f0_smu_max=4.0
-potfac=0. #factor that reduces E field in case it is too strong
-temp_step=0
-Nr,Nz=200,200 #number of uniform grid points in r and z
-pot00_step=-1 #-1 means the last step
+#initialize some global variables
 Ta=setup.Tempix(temp_step)
 vt=np.sqrt(qi*Ta/mi) #thermal speed
 
 var.init(potfac,Nr,Nz,temp_step,pot00_step)
 
 #setup orbit arrays
-nmu,nvp,nH=3,1,4
-nPphi=2*nvp+1
-#mu array and P_phi array
 mu_max=(f0_smu_max**2)*mi*(vt**2)/2/var.Ba
 vp_max=f0_vp_max*vt
 mu_arr=np.linspace(0,mu_max,nmu)
 mu_arr[0]=mu_arr[1]/2 #to avoid zero mu
-vphi_arr=np.linspace(-vp_max,vp_max,2*nvp+1)
+vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
 #vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0
 if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
   Pphi_arr=mi*var.Ra*vphi_arr+qi*var.psix
@@ -36,9 +26,6 @@ else:
 #H array
 r_beg,z_beg,r_end,z_end=var.H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr)
 #determine orbit trajectories through RK4 integration
-dt_orb=1E-8
-dt_xgc=3.9515E-7
-nt=200
 r_orb=np.zeros((nmu,nPphi,nH,nt),dtype=float)
 z_orb=np.zeros((nmu,nPphi,nH,nt),dtype=float)
 phi_orb=np.zeros((nmu,nPphi,nH,nt),dtype=float)
@@ -58,7 +45,73 @@ for imu in range(nmu):
       phi_orb[imu,iPphi,iH,:]=phi_orb1
       vp_orb[imu,iPphi,iH,:]=vp_orb1
       steps_orb[imu,iPphi,iH]=step
-print(steps_orb)
 #import matplotlib.pyplot as plt
 #plt.imshow(Ez,origin='lower')
 #plt.savefig('test.pdf')
+output=open('orbit.txt','w')
+output.write('%8d%8d%8d%8d\n'% (nmu,nPphi,nH,nt))
+count=0
+#orbit steps
+for imu in range(nmu):
+  for iPphi in range(nPphi):
+    for iH in range(nH):
+      count=count+1
+      value=steps_orb[imu,iPphi,iH]
+      output.write('%8d'%value)
+      if count%4==0: output.write('\n')
+if count%4!=0: output.write('\n')
+#mu array
+count=0
+for imu in range(nmu):
+  count=count+1
+  value=mu_arr[imu]
+  output.write('%19.10E '%value)
+  if count%4==0: output.write('\n')
+if count%4!=0: output.write('\n')
+#R_orb
+count=0
+for imu in range(nmu):
+  for iPphi in range(nPphi):
+    for iH in range(nH):
+      for it in range(nt):
+        count=count+1
+        value=r_orb[imu,iPphi,iH,it]
+        output.write('%19.10E '%value)
+        if count%4==0: output.write('\n')
+if count%4!=0: output.write('\n')
+#Z_orb
+count=0
+for imu in range(nmu):
+  for iPphi in range(nPphi):
+    for iH in range(nH):
+      for it in range(nt):
+        count=count+1
+        value=z_orb[imu,iPphi,iH,it]
+        output.write('%19.10E '%value)
+        if count%4==0: output.write('\n')
+if count%4!=0: output.write('\n')
+#phi_orb
+count=0
+for imu in range(nmu):
+  for iPphi in range(nPphi):
+    for iH in range(nH):
+      for it in range(nt):
+        count=count+1
+        value=phi_orb[imu,iPphi,iH,it]
+        output.write('%19.10E '%value)
+        if count%4==0: output.write('\n')
+if count%4!=0: output.write('\n')
+#vp_orb
+count=0
+for imu in range(nmu):
+  for iPphi in range(nPphi):
+    for iH in range(nH):
+      for it in range(nt):
+        count=count+1
+        value=vp_orb[imu,iPphi,iH,it]
+        output.write('%19.10E '%value)
+        if count%4==0: output.write('\n')
+if count%4!=0: output.write('\n')
+#end flag
+output.write('%8d\n'%-1)
+output.close()

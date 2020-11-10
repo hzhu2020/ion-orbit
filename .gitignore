@@ -1,4 +1,5 @@
 *.bp
 *.py.swp
 *.pdf
+*.txt
 __pycache__

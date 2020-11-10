@@ -2,14 +2,15 @@ import adios as ad
 import numpy as np
 from scipy.interpolate import griddata
 import math
+from parameters import input_dir,LCFS_psitol,LCFS_rztol
 
 def Grid(Nr,Nz):
-  fname='input/xgc.mesh.bp'
+  fname=input_dir+'/xgc.mesh.bp'
   f=ad.file(fname)
   rz=f['rz'].read()
   psi_rz=f['psi'].read()
   f.close()
-  fname='input/xgc.equil.bp'
+  fname=input_dir+'/xgc.equil.bp'
   f=ad.file(fname)
   rx=f['eq_x_r'].read()
   zx=f['eq_x_z'].read()
@@ -22,14 +23,14 @@ def Grid(Nr,Nz):
   RLCFS=np.array([],dtype=float)
   ZLCFS=np.array([],dtype=float)
   for i in range(np.shape(rz)[0]):
-    if (abs(psi_rz[i]-psix)<1E-5) and (rz[i,1]>zx-1E-4):
+    if (abs(psi_rz[i]-psix)<LCFS_psitol) and (rz[i,1]>zx-LCFS_rztol):
       RLCFS=np.append(RLCFS,rz[i,0])
       ZLCFS=np.append(ZLCFS,rz[i,1])
   size=np.size(RLCFS)
   theta=np.zeros((size,),dtype=float)
   for i in range(size):
     theta[i]=math.atan2(ZLCFS[i]-za,RLCFS[i]-ra)
-    if (abs(ZLCFS[i]-zx)<1E-4)and(abs(RLCFS[i]-rx)<1E-4): thetax=theta[i]
+    if (abs(ZLCFS[i]-zx)<LCFS_rztol)and(abs(RLCFS[i]-rx)<LCFS_rztol): thetax=theta[i]
   for i in range(size):
     if theta[i]<=thetax: theta[i]=theta[i]+2*np.pi
   idx=np.argsort(theta)
@@ -39,7 +40,7 @@ def Grid(Nr,Nz):
   
 def Tempix(step):
   #get ion equilibrium temperature at the LCFS
-  fname='input/xgc.oneddiag.bp'
+  fname=input_dir+'/xgc.oneddiag.bp'
   f=ad.file(fname)
   psi=f['psi'].read() #psi is normalized
   Tperp=f['i_perp_temperature_df_1d'].read()
@@ -79,7 +80,7 @@ def Curl(r,z,fldr,fldz,fldphi,Nr,Nz):
   return curlr,curlz,curlphi
 
 def Bfield(rz,rlin,zlin):
-  fname='input/xgc.bfield.bp'
+  fname=input_dir+'/xgc.bfield.bp'
   f=ad.file(fname)
   B=f['/node_data[0]/values'].read()
   f.close()
@@ -90,7 +91,7 @@ def Bfield(rz,rlin,zlin):
   return Br,Bz,Bphi
 
 def Pot00(step):
-  fname='input/xgc.oneddiag.bp'
+  fname=input_dir+'/xgc.oneddiag.bp'
   f=ad.file(fname)
   psi00=f['psi00'].read()
   pot00=f['pot00_1d'].read()
