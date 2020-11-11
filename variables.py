@@ -4,10 +4,14 @@ import math
 import setup
 import myinterp
 
-def init(potfac,Nr,Nz,temp_step,pot00_step):
+def init(potfac,Nr,Nz,pot00_step,comm,rank):
   #read mesh
   global R,Z,psi2d,psix,Ra,Ba,rLCFS,zLCFS
-  rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS=setup.Grid(Nr,Nz)
+  if rank==0:
+    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS=setup.Grid(Nr,Nz)
+  else:
+    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS=[None]*8
+  rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS=comm.bcast((rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS),root=0)
   rmesh=rz[:,0]
   zmesh=rz[:,1]
   rlin=np.linspace(min(rmesh),max(rmesh),Nr)
@@ -17,7 +21,11 @@ def init(potfac,Nr,Nz,temp_step,pot00_step):
   Ra=(min(rmesh)+max(rmesh))/2 #major radius
   #read B field
   global Bmag,Br,Bz,Bphi,br,bz,bphi
-  Br,Bz,Bphi=setup.Bfield(rz,rlin,zlin)
+  if rank==0:
+    Br,Bz,Bphi=setup.Bfield(rz,rlin,zlin)
+  else:
+    Br,Bz,Bphi=[None]*3
+  Br,Bz,Bphi=comm.bcast((Br,Bz,Bphi),root=0)
   Bmag=np.sqrt(Br**2+Bz**2+Bphi**2)
   br=Br/Bmag
   bz=Bz/Bmag
@@ -28,7 +36,11 @@ def init(potfac,Nr,Nz,temp_step,pot00_step):
   curlBr,curlBz,curlBphi=setup.Curl(rlin,zlin,Br,Bz,Bphi,Nr,Nz)
   curlbr,curlbz,curlbphi=setup.Curl(rlin,zlin,br,bz,bphi,Nr,Nz)
   #read 1d pot00 and interpolate it to 2D
-  psi00,pot00_1d=setup.Pot00(pot00_step)
+  if rank==0:
+    psi00,pot00_1d=setup.Pot00(pot00_step)
+  else:
+    psi00,pot00_1d=None,None
+  psi00,pot00_1d=comm.bcast((psi00,pot00_1d),root=0)
   pot00_2d=np.nan*np.zeros((Nz,Nr),dtype=float)
   for i in range(1,Nz-1):
     for j in range(1,Nr-1):

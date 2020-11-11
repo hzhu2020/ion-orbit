@@ -2,7 +2,7 @@ import variables as var
 import myinterp
 import numpy as np
 import math
-from parameters import max_step,cross_psitol,cross_rztol
+from parameters import max_step,cross_psitol,cross_rztol,debug
 
 def tau_orb(qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   r=np.sqrt(x**2+y**2)
@@ -71,13 +71,13 @@ def tau_orb(qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     tau=tau+dt_orb
     #check if the orbit has crossed the LCFS
     psi=myinterp.TwoD(var.R,var.Z,var.psi2d,r,z)
-    if (psi>(1+cross_psitol)*var.psix) or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol) or (not step_flag):
+    if (psi>(1+cross_psitol)*var.psix) or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol) or (not (debug or step_flag)):
       break
   #end of the time loop
 
   if step_count==nt-1: 
     step_count=step_count+1 
-  return step_count,r_orb1,z_orb1,phi_orb1,vp_orb1
+  return tau,step_count,r_orb1,z_orb1,phi_orb1,vp_orb1
 
 def rhs(qi,mi,r,phi,z,mu,vp):
     #B

@@ -28,3 +28,6 @@ LCFS_rztol=1E-4
 #tolerance parameters for determing whether the orbit has crossed the LCFS
 cross_psitol=0.005
 cross_rztol=0.005
+#for debug
+debug=False
+debug_dir='debug_dir'
