@@ -4,6 +4,24 @@ import math
 import setup
 import myinterp
 
+def varTwoD(x2d,y2d,f2d,xin,yin):
+  Ny,Nx=np.shape(x2d)
+  x0=x2d[0,0]
+  dx=x2d[0,1]-x0
+  y0=y2d[0,0]
+  dy=y2d[1,0]-y0
+  ix=math.floor((xin-x0)/dx)
+  wx=(xin-x0)/dx-ix
+  iy=math.floor((yin-y0)/dy)
+  wy=(yin-y0)/dy-iy
+  if (ix<0) or (ix>Nx-2) or (iy<0) or (iy>Ny-2):
+    fout=np.nan
+  else:
+    fout=f2d[iy,ix]*(1-wy)*(1-wx) + f2d[iy+1,ix]*wy*(1-wx)\
+        +f2d[iy,ix+1]*(1-wy)*wx + f2d[iy+1,ix+1]*wy*wx
+
+  return fout
+
 def init(potfac,Nr,Nz,pot00_step,comm,rank):
   #read mesh
   global R,Z,psi2d,psix,Ra,Ba,rLCFS,zLCFS
@@ -44,7 +62,7 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
   pot00_2d=np.nan*np.zeros((Nz,Nr),dtype=float)
   for i in range(1,Nz-1):
     for j in range(1,Nr-1):
-      psi=myinterp.TwoD(R,Z,psi2d,rlin[j],zlin[i])
+      psi=varTwoD(R,Z,psi2d,rlin[j],zlin[i])
       if not(np.isnan(psi)):
         if zlin[i]>=zx:
           pot00_2d[i,j]=potfac*myinterp.OneD(psi00,pot00_1d,psi)
@@ -58,16 +76,17 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
   Ephi=-Ephi
 
 def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
-  global Hmin,Hmax
+  global Hmin,Hmax,dH
   nLCFS=np.size(rLCFS)#number of mesh points along the LCFS
   BLCFS=np.zeros((nLCFS,),dtype=float)#magnitude of B 
   covbphiLCFS=np.zeros((nLCFS,),dtype=float)#covariant component \vec{b}\cdot(dX/d\phi)
   for i in range(nLCFS):
     r,z=rLCFS[i],zLCFS[i]
-    BLCFS[i]=myinterp.TwoD(R,Z,Bmag,r,z)
-    covbphiLCFS[i]=r*myinterp.TwoD(R,Z,Bphi,r,z)/BLCFS[i]
+    BLCFS[i]=varTwoD(R,Z,Bmag,r,z)
+    covbphiLCFS[i]=r*varTwoD(R,Z,Bphi,r,z)/BLCFS[i]
   Hmin=np.zeros((nmu,nPphi),dtype=float)
   Hmax=np.zeros((nmu,nPphi),dtype=float)
+  dH=np.zeros((nmu,nPphi,nH),dtype=float)
   #crossing locations of the orbits with the LCFS
   r_beg=np.zeros((nmu,nPphi,nH),dtype=float)
   z_beg=np.zeros((nmu,nPphi,nH),dtype=float)
@@ -84,6 +103,7 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
       diH=math.floor((maxloc-minloc)/(nH+2))
       for iH in range(nH):
         iLCFS=minloc+diH*(iH+1)
+        dH[imu,iPphi,iH]=0.5*(HLCFS[iLCFS+diH]-HLCFS[iLCFS-diH])
         r_beg[imu,iPphi,iH]=rLCFS[iLCFS]
         z_beg[imu,iPphi,iH]=zLCFS[iLCFS]
         if HLCFS[iLCFS]<=HLCFS[0]:
@@ -95,7 +115,11 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
           r_end[imu,iPphi,iH]=(1-wH)*rLCFS[endloc]+wH*rLCFS[endloc-1]
           z_end[imu,iPphi,iH]=(1-wH)*zLCFS[endloc]+wH*zLCFS[endloc-1]
         else:
-          wH=(HLCFS[iLCFS]-HLCFS[endloc])/(HLCFS[endloc+1]-HLCFS[endloc])
-          r_end[imu,iPphi,iH]=(1-wH)*rLCFS[endloc]+wH*rLCFS[endloc+1]
-          z_end[imu,iPphi,iH]=(1-wH)*zLCFS[endloc]+wH*zLCFS[endloc+1]
+          if endloc==nLCFS-1:
+            nextloc=0
+          else:
+            nextloc=endloc+1
+          wH=(HLCFS[iLCFS]-HLCFS[endloc])/(HLCFS[nextloc]-HLCFS[endloc])
+          r_end[imu,iPphi,iH]=(1-wH)*rLCFS[endloc]+wH*rLCFS[nextloc]
+          z_end[imu,iPphi,iH]=(1-wH)*zLCFS[endloc]+wH*zLCFS[nextloc]
   return r_beg,z_beg,r_end,z_end

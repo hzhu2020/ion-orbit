@@ -1,13 +1,14 @@
 import numpy as np
 import math
 import setup
-import myinterp
 import orbit
+import myinterp
 from parameters import qi,mi,f0_vp_max,f0_smu_max,potfac,temp_step,pot00_step,\
                        Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug
 import variables as var
 from mpi4py import MPI
 import plots
+import time
 
 #MPI is automatically initialized when imported; likewise, no need to call finalize.
 comm = MPI.COMM_WORLD
@@ -21,7 +22,10 @@ else:
 Ta=comm.bcast(Ta,root=0)
 vt=np.sqrt(qi*Ta/mi) #thermal speed
 var.init(potfac,Nr,Nz,pot00_step,comm,rank)
-if (debug) and (rank==0): plots.plotEB()
+myinterp.init(var.R,var.Z)
+if (debug) and (rank==0):
+  plots.plotEB()
+  plots.writeLCFS()
 #setup orbit arrays
 mu_max=(f0_smu_max**2)*mi*(vt**2)/2/var.Ba
 vp_max=f0_vp_max*vt
@@ -64,6 +68,7 @@ phi_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 vp_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 steps_orb=np.zeros((mynorb,),dtype=int)
 if debug: tau_orb=np.zeros((mynorb,),dtype=float)
+t_beg_tot=time.time()
 for iorb in range(iorb1,iorb2+1):
   imu=int(iorb/(nPphi*nH))
   iPphi=int((iorb-imu*nPphi*nH)/nH)
@@ -71,16 +76,18 @@ for iorb in range(iorb1,iorb2+1):
   mu=mu_arr[imu]
   Pphi=Pphi_arr[iPphi]
   x,y,z=r_beg[imu,iPphi,iH],0,z_beg[imu,iPphi,iH]
-  tau,step,r_orb1,z_orb1,phi_orb1,vp_orb1=orbit.tau_orb(qi,mi,x,y,z,\
+  t_beg=time.time()
+  tau,step,r_orb1,z_orb1,phi_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_orb,dt_xgc,nt)
-  print(imu,iPphi,iH)
+  t_end=time.time()
+  print('rank=',rank,', orb=',iorb,', tau=',tau,', cpu time=',t_end-t_beg,'s',flush=True)
   r_orb[iorb-iorb1,:]=r_orb1
   z_orb[iorb-iorb1,:]=z_orb1
   phi_orb[iorb-iorb1,:]=phi_orb1
   vp_orb[iorb-iorb1,:]=vp_orb1
   steps_orb[iorb-iorb1]=step
   if debug: tau_orb[iorb-iorb1]=tau
-if debug: plots.plotOrbits(r_orb,z_orb,steps_orb,mynorb,rank)
+t_end_tot=time.time()
 #rank=0 gather data and output
 if rank==0:
   count1=np.zeros((size,),dtype=int)
@@ -97,6 +104,7 @@ else:
   if debug: tau_output=None
   steps_output,r_output,z_output,phi_output,vp_output,count1,count2=[None]*7
 comm.barrier()
+print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min')
 comm.Gatherv(steps_orb,(steps_output,count1),root=0)
 if debug: comm.Gatherv(tau_orb,(tau_output,count1),root=0)
 comm.Gatherv(r_orb,(r_output,count2),root=0)
