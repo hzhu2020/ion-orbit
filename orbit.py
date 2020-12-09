@@ -38,10 +38,8 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
       z_orb1[step_count]=z
       phi_orb1[step_count]=phi
       vp_orb1[step_count]=vp
-      if step_count<nt-1:
-        step_count=step_count+1
-      else:
-        step_flag=False#only record nt steps of orbit information
+      step_count=step_count+1
+      if step_count==nt: step_flag=False#only record nt steps of orbit information
     
     #RK4 1st step
     dxdtc,dvpdtc=rhs(qi,mi,r,phi,z,mu,vp)
@@ -92,8 +90,6 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
       break
   #end of the time loop
  
-  if step_count==nt-1: 
-    step_count=step_count+1 
   if debug:  
     output.write('%8d\n'%-1)
     output.seek(0)

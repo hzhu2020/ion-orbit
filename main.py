@@ -48,19 +48,17 @@ if rank==0:
   norb=nmu*nPphi*nH
   norb_avg=int(norb/size)
   norb_last=norb-norb_avg*(size-1)
-  while (norb_last>norb_avg) and (norb_last>size-1):
-    norb_avg=norb_avg+1
-    norb_last=norb-norb_avg*(size-1)
+  norb_list=np.zeros((size,1),dtype=int)
+  norb_list[:]=norb_avg
+  if norb_last>norb_avg:
+    for irank in range(norb_last-norb_avg): norb_list[irank]=norb_list[irank]+1
 else:
-  norb,norb_avg,norb_last=[None]*3
-norb,norb_avg,norb_last=comm.bcast((norb,norb_avg,norb_last),root=0)
-if rank<size-1:
-  iorb1=norb_avg*rank
-  iorb2=iorb1+norb_avg-1
-else:
-  iorb2=norb-1
-  iorb1=norb-norb_last
-mynorb=iorb2-iorb1+1
+  norb_list=None
+
+norb_list=comm.bcast(norb_list,root=0)
+mynorb=int(norb_list[rank])
+iorb1=int(sum(norb_list[0:rank]))
+iorb2=iorb1+mynorb-1
 #determine orbit trajectories through RK4 integration
 r_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 z_orb=np.zeros((mynorb,nt),dtype=float,order='C')
