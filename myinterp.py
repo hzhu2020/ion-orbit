@@ -22,6 +22,20 @@ def OneD(x1d,f1d,xin):
 
   return fout
 
+def OneD_NL(x1d,f1d,xin):
+  if xin<=x1d[0]: return x1d[0]
+  Nx=np.size(x1d)
+  if xin>=x1d[Nx-1]: return x1d[Nx-1]
+  dx=x1d[1]-x1d[0]  
+  ix=math.floor((xin-x1d[0])/dx) #initial guess
+  ix=min(ix,Nx-1)
+  while xin<x1d[ix]: ix=ix-1
+  while xin>x1d[ix+1]: ix=ix+1
+  wx=(xin-x1d[ix])/(x1d[ix+1]-x1d[ix])
+  fout=f1d[ix]*(1-wx)+f1d[ix+1]*wx
+
+  return fout
+
 def TwoD(f2d,xin,yin):
   if xin==np.nan:
     print(xin,yin,dx,dy)

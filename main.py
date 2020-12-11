@@ -62,9 +62,10 @@ iorb2=iorb1+mynorb-1
 #determine orbit trajectories through RK4 integration
 r_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 z_orb=np.zeros((mynorb,nt),dtype=float,order='C')
-phi_orb=np.zeros((mynorb,nt),dtype=float,order='C')
+#phi_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 vp_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 steps_orb=np.zeros((mynorb,),dtype=int)
+dt_orb_out_orb=np.zeros((mynorb,),dtype=float)
 if debug: tau_orb=np.zeros((mynorb,),dtype=float)
 t_beg_tot=time.time()
 for iorb in range(iorb1,iorb2+1):
@@ -75,15 +76,16 @@ for iorb in range(iorb1,iorb2+1):
   Pphi=Pphi_arr[iPphi]
   x,y,z=r_beg[imu,iPphi,iH],0,z_beg[imu,iPphi,iH]
   t_beg=time.time()
-  tau,step,r_orb1,z_orb1,phi_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
+  tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_orb,dt_xgc,nt)
   t_end=time.time()
   print('rank=',rank,', orb=',iorb,', tau=',tau,', cpu time=',t_end-t_beg,'s',flush=True)
   r_orb[iorb-iorb1,:]=r_orb1
   z_orb[iorb-iorb1,:]=z_orb1
-  phi_orb[iorb-iorb1,:]=phi_orb1
+  #phi_orb[iorb-iorb1,:]=phi_orb1
   vp_orb[iorb-iorb1,:]=vp_orb1
   steps_orb[iorb-iorb1]=step
+  dt_orb_out_orb[iorb-iorb1]=dt_orb_out
   if debug: tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
 #rank=0 gather data and output
@@ -93,21 +95,23 @@ if rank==0:
   count1[size-1]=norb_last
   count2=count1*nt
   steps_output=np.zeros((norb,),dtype=int)
+  dt_orb_output=np.zeros((norb,),dtype=float)
   if debug: tau_output=np.zeros((norb,),dtype=float)
   r_output=np.zeros((norb,nt),dtype=float,order='C')
   z_output=np.zeros((norb,nt),dtype=float,order='C')
-  phi_output=np.zeros((norb,nt),dtype=float,order='C')
+  #phi_output=np.zeros((norb,nt),dtype=float,order='C')
   vp_output=np.zeros((norb,nt),dtype=float,order='C')
 else:
   if debug: tau_output=None
-  steps_output,r_output,z_output,phi_output,vp_output,count1,count2=[None]*7
+  steps_output,dt_orb_output,r_output,z_output,vp_output,count1,count2=[None]*7
 comm.barrier()
 print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min')
 comm.Gatherv(steps_orb,(steps_output,count1),root=0)
+comm.Gatherv(dt_orb_out_orb,(dt_orb_output,count1),root=0)
 if debug: comm.Gatherv(tau_orb,(tau_output,count1),root=0)
 comm.Gatherv(r_orb,(r_output,count2),root=0)
 comm.Gatherv(z_orb,(z_output,count2),root=0)
-comm.Gatherv(phi_orb,(phi_output,count2),root=0)
+#comm.Gatherv(phi_orb,(phi_output,count2),root=0)
 comm.Gatherv(vp_orb,(vp_output,count2),root=0)
 if rank==0:
   #output tau separately for debug
@@ -128,6 +132,14 @@ if rank==0:
     count=count+1
     value=steps_output[iorb]
     output.write('%8d'%value)
+    if count%4==0: output.write('\n')
+  if count%4!=0: output.write('\n')
+  #orbit step size
+  count=0
+  for iorb in range(norb):
+    count=count+1
+    value=dt_orb_output[iorb]
+    output.write('%19.10E '%value)
     if count%4==0: output.write('\n')
   if count%4!=0: output.write('\n')
   #mu array
@@ -157,14 +169,14 @@ if rank==0:
       if count%4==0: output.write('\n')
   if count%4!=0: output.write('\n')
   #phi_orb
-  count=0
-  for iorb in range(norb):
-    for it in range(nt):
-      count=count+1
-      value=phi_output[iorb,it]
-      output.write('%19.10E '%value)
-      if count%4==0: output.write('\n')
-  if count%4!=0: output.write('\n')
+#  count=0
+#  for iorb in range(norb):
+#    for it in range(nt):
+#      count=count+1
+#      value=phi_output[iorb,it]
+#      output.write('%19.10E '%value)
+#      if count%4==0: output.write('\n')
+#  if count%4!=0: output.write('\n')
   #vp_orb
   count=0
   for iorb in range(norb):

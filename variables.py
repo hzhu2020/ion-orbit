@@ -24,12 +24,13 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
 
 def init(potfac,Nr,Nz,pot00_step,comm,rank):
   #read mesh
-  global R,Z,psi2d,psix,Ra,Ba,rLCFS,zLCFS
+  global rlin,zlin,R,Z,psi2d,psix,Ra,Ba,rLCFS,zLCFS,theta,dist
   if rank==0:
-    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS=setup.Grid(Nr,Nz)
+    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist=setup.Grid(Nr,Nz)
   else:
-    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS=[None]*8
-  rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS=comm.bcast((rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS),root=0)
+    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist=[None]*10
+  rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist\
+            =comm.bcast((rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist),root=0)
   rmesh=rz[:,0]
   zmesh=rz[:,1]
   rlin=np.linspace(min(rmesh),max(rmesh),Nr)
@@ -49,7 +50,7 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
   bz=Bz/Bmag
   bphi=Bphi/Bmag
   #calculate grad B, curl B, and curl b
-  global gradBr,gradBz,gradBphi,curlBr,curlBz,curlBphi,curlbr,curlbz,curlbphi
+  global gradBr,gradBz,gradBphi,curlBr,curlBz,curlBphi,curlbr,curlbz,curlbphi,pot00_2d
   gradBr,gradBz,gradBphi=setup.Grad(rlin,zlin,Bmag,Nr,Nz)
   curlBr,curlBz,curlBphi=setup.Curl(rlin,zlin,Br,Bz,Bphi,Nr,Nz)
   curlbr,curlbz,curlbphi=setup.Curl(rlin,zlin,br,bz,bphi,Nr,Nz)
@@ -64,7 +65,7 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
     for j in range(1,Nr-1):
       psi=varTwoD(R,Z,psi2d,rlin[j],zlin[i])
       if not(np.isnan(psi)):
-        if zlin[i]>=zx:
+        if True:# zlin[i]>=zx:
           pot00_2d[i,j]=potfac*myinterp.OneD(psi00,pot00_1d,psi)
         else:
           pot00_2d[i,j]=0
@@ -123,3 +124,9 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
           r_end[imu,iPphi,iH]=(1-wH)*rLCFS[endloc]+wH*rLCFS[nextloc]
           z_end[imu,iPphi,iH]=(1-wH)*zLCFS[endloc]+wH*zLCFS[nextloc]
   return r_beg,z_beg,r_end,z_end
+
+def H2d(mu,Pphi,mi,qi):
+  vp2d=(Pphi-qi*psi2d)/mi/R/Bphi*Bmag
+  H=mu*Bmag+0.5*mi*vp2d**2+qi*pot00_2d
+  gradHr,gradHz,gradHphi=setup.Grad(rlin,zlin,H,rlin.size,zlin.size)
+  return H,gradHr,gradHz 
