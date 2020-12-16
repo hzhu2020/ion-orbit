@@ -1,4 +1,4 @@
-from parameters import adios_version,input_dir,LCFS_psitol,LCFS_rztol
+from parameters import adios_version,input_dir,LCFS_psitol,LCFS_rztol,interp_method
 if adios_version==1:
   import adios as ad
 elif adios_version==2:
@@ -127,9 +127,9 @@ def Bfield(rz,rlin,zlin):
     f.close()
 
   R,Z=np.meshgrid(rlin,zlin)
-  Br=griddata(rz,B[:,0],(R,Z),method='linear')
-  Bz=griddata(rz,B[:,1],(R,Z),method='linear')
-  Bphi=griddata(rz,B[:,2],(R,Z),method='linear')
+  Br=griddata(rz,B[:,0],(R,Z),method=interp_method)
+  Bz=griddata(rz,B[:,1],(R,Z),method=interp_method)
+  Bphi=griddata(rz,B[:,2],(R,Z),method=interp_method)
   return Br,Bz,Bphi
 
 def Pot00(step):

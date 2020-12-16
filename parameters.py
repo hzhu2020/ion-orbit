@@ -10,24 +10,27 @@ input_dir='bp2_dir'
 adios_version=2
 #which time step from XGC output to use for the temperature and zonal potential;
 #the step index starts from 0
-temp_step=999 
+temp_step=0 
 pot00_step=999 
 #number of uniform grid points in r and z
 Nr=500
 Nz=500
+#method to interpolate from XGC mesh to rectangular mesh
+#options: 'linear', 'nearest', 'cubic'
+interp_method='cubic'
 #number of elements in mu, Pphi, H, and t
 nmu=4
 nPphi=4
 nH=4
 nt=200
-dt_orb=2E-9 #time step size for the orbit integration
+dt_orb=1E-8 #time step size for the orbit integration
 max_step=2E5 #max number of time steps for orbit integration
 dt_xgc=3.9515E-7 #simulation time step size of XGC
 #tolerance parameters for finding LCFS
 LCFS_psitol=1E-5
 LCFS_rztol=1E-4
 #tolerance parameters for determing whether the orbit has crossed the LCFS
-cross_psitol=0.005 #percentage
+cross_psitol=0.0025 #percentage
 cross_rztol=0.005 #centimeter
 cross_disttol=0.005 #percentage
 #for debug

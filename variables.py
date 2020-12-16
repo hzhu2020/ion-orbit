@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.interpolate import griddata
+from parameters import interp_method
+from scipy.interpolate import griddata,interp1d
 import math
 import setup
 import myinterp
@@ -36,7 +37,7 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
   rlin=np.linspace(min(rmesh),max(rmesh),Nr)
   zlin=np.linspace(min(zmesh),max(zmesh),Nz)
   R,Z=np.meshgrid(rlin,zlin)
-  psi2d=griddata(rz,psi_rz,(R,Z),method='linear')
+  psi2d=griddata(rz,psi_rz,(R,Z),method=interp_method)
   Ra=(min(rmesh)+max(rmesh))/2 #major radius
   #read B field
   global Bmag,Br,Bz,Bphi,br,bz,bphi
@@ -60,15 +61,16 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
   else:
     psi00,pot00_1d=None,None
   psi00,pot00_1d=comm.bcast((psi00,pot00_1d),root=0)
+  pot_interp=interp1d(psi00,pot00_1d,kind=interp_method)
   pot00_2d=np.nan*np.zeros((Nz,Nr),dtype=float)
   for i in range(1,Nz-1):
     for j in range(1,Nr-1):
       psi=varTwoD(R,Z,psi2d,rlin[j],zlin[i])
-      if not(np.isnan(psi)):
-        if True:# zlin[i]>=zx:
-          pot00_2d[i,j]=potfac*myinterp.OneD(psi00,pot00_1d,psi)
-        else:
-          pot00_2d[i,j]=0
+      if not(np.isnan(psi)) and (psi<max(psi00)) and (psi>min(psi00)):
+        pot00_2d[i,j]=potfac*pot_interp(psi)
+      else:
+        pot00_2d[i,j]=np.nan
+ 
   #calculate E=-grad phi TODO: including gyroaverage of E
   global Er,Ez,Ephi
   Er,Ez,Ephi=setup.Grad(rlin,zlin,pot00_2d,Nr,Nz)

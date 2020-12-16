@@ -192,7 +192,12 @@ def rhs(qi,mi,r,phi,z,mu,vp):
     #equation of motion
     rhop=mi*vp/qi/Bmag
     D=1.+rhop*np.dot(b,curlb)
-    dvpdt=-np.dot(b+rhop*curlb,mu*gradB-qi*E)/(mi*D)
+    #dvpdt=-np.dot(b+rhop*curlb,mu*gradB-qi*E)/(mi*D)
+    #dot(b,E) is not zero even for zonal Er, that causes numerical problems
+    #need to add dot(b,nonzonal E) in the future
+    dvpdt=-np.dot(rhop*curlb,mu*gradB-qi*E)/(mi*D)
+    dvpdt=dvpdt-np.dot(b,mu*gradB)/(mi*D)
+
     dxdt=vp*(b+rhop*curlb)+mycross(B,mu*gradB-qi*E)/qi/Bmag**2
     dxdt=dxdt/D
     return dxdt,dvpdt
