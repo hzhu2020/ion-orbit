@@ -1,3 +1,4 @@
+twod=True #if true, only consider poloidal trajectories for axisymmetric torus
 #All paramers are in mks unit
 qi=1.60217662E-19#ion charge
 mi=2*1.67262192369E-27#ion mass
@@ -23,8 +24,8 @@ nmu=4
 nPphi=4
 nH=4
 nt=200
-dt_orb=1E-8 #time step size for the orbit integration
-max_step=2E5 #max number of time steps for orbit integration
+dt_orb=5E-8 #time step size for the orbit integration
+max_step=2E4 #max number of time steps for orbit integration
 dt_xgc=3.9515E-7 #simulation time step size of XGC
 #tolerance parameters for finding LCFS
 LCFS_psitol=1E-5
