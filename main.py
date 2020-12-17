@@ -11,7 +11,7 @@ import time
 if twod:
   import orbit2d as orbit
 else:
-  import orbit
+  import orbit3d as orbit
 
 #MPI is automatically initialized when imported; likewise, no need to call finalize.
 comm = MPI.COMM_WORLD
@@ -93,9 +93,7 @@ for iorb in range(iorb1,iorb2+1):
 t_end_tot=time.time()
 #rank=0 gather data and output
 if rank==0:
-  count1=np.zeros((size,),dtype=int)
-  count1[0:size-1]=norb_avg
-  count1[size-1]=norb_last
+  count1=norb_list
   count2=count1*nt
   steps_output=np.zeros((norb,),dtype=int)
   dt_orb_output=np.zeros((norb,),dtype=float)
