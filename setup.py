@@ -1,4 +1,4 @@
-from parameters import adios_version,input_dir,LCFS_psitol,LCFS_rztol,interp_method
+from parameters import adios_version,input_dir,surf_psin,surf_psitol,surf_rztol,interp_method
 if adios_version==1:
   import adios as ad
 elif adios_version==2:
@@ -42,26 +42,32 @@ def Grid(Nr,Nz):
     za=f.read('eq_axis_z')
     f.close()
   #find the LCFS
-  RLCFS=np.array([],dtype=float)
-  ZLCFS=np.array([],dtype=float)
+  Rsurf=np.array([],dtype=float)
+  Zsurf=np.array([],dtype=float)
   for i in range(np.shape(rz)[0]):
-    if (abs(psi_rz[i]-psix)<LCFS_psitol) and (rz[i,1]>zx-LCFS_rztol):
-      RLCFS=np.append(RLCFS,rz[i,0])
-      ZLCFS=np.append(ZLCFS,rz[i,1])
-  size=np.size(RLCFS)
+    if (abs(psi_rz[i]-psix*surf_psin)<surf_psitol) and (rz[i,1]>zx-surf_rztol):
+      Rsurf=np.append(Rsurf,rz[i,0])
+      Zsurf=np.append(Zsurf,rz[i,1])
+  size=np.size(Rsurf)
   theta=np.zeros((size,),dtype=float)
   dist=np.zeros((size,),dtype=float)
   for i in range(size):
-    dist[i]=np.sqrt((ZLCFS[i]-za)**2+(RLCFS[i]-ra)**2)
-    theta[i]=math.atan2(ZLCFS[i]-za,RLCFS[i]-ra)
-    if (abs(ZLCFS[i]-zx)<LCFS_rztol)and(abs(RLCFS[i]-rx)<LCFS_rztol): thetax=theta[i]
+    dist[i]=np.sqrt((Zsurf[i]-za)**2+(Rsurf[i]-ra)**2)
+    theta[i]=math.atan2(Zsurf[i]-za,Rsurf[i]-ra)
+    #if (abs(ZLCFS[i]-zx)<surf_rztol)and(abs(RLCFS[i]-rx)<surf_rztol): thetax=theta[i]
+
+  #pin the starting node of the surface at the bottom
   for i in range(size):
-    if theta[i]<=thetax: theta[i]=theta[i]+2*np.pi
+    if theta[i]<=-np.pi/2: theta[i]=theta[i]+2*np.pi
+    #if theta[i]<=thetax: theta[i]=theta[i]+2*np.pi
+
   idx=np.argsort(theta)
-  RLCFS=RLCFS[idx]
-  ZLCFS=ZLCFS[idx]
+  theta=theta[idx]
+  Rsurf=Rsurf[idx]
+  Zsurf=Zsurf[idx]
   dist=dist[idx]
-  return rz,psi_rz,rx,zx,psix,Ba,RLCFS,ZLCFS,theta,dist
+  print('nsurf=',np.size(Rsurf))
+  return rz,psi_rz,rx,zx,psix,Ba,Rsurf,Zsurf,theta,dist
   
 def Tempix(step):
   #get ion equilibrium temperature at the LCFS
@@ -84,7 +90,8 @@ def Tempix(step):
 
   Ta=np.nan
   for i in range(np.size(psi)):
-    if abs(psi[i]-1.0)<1e-3: Ta=Tperp[i]
+    if abs(psi[i]-surf_psin)<surf_psitol: Ta=Tperp[i]
+  print('Ta=',Ta)
   return Ta
 
 def Grad(r,z,fld,Nr,Nz):

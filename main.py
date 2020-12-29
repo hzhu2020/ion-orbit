@@ -28,7 +28,7 @@ var.init(potfac,Nr,Nz,pot00_step,comm,rank)
 myinterp.init(var.R,var.Z)
 if (debug) and (rank==0):
   plots.plotEB()
-  plots.writeLCFS()
+  plots.write_surf()
 #setup orbit arrays
 mu_max=(f0_smu_max**2)*mi*(vt**2)/2/var.Ba
 vp_max=f0_vp_max*vt

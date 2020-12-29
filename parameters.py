@@ -27,9 +27,10 @@ nt=200
 dt_orb=5E-8 #time step size for the orbit integration
 max_step=2E4 #max number of time steps for orbit integration
 dt_xgc=3.9515E-7 #simulation time step size of XGC
-#tolerance parameters for finding LCFS
-LCFS_psitol=1E-5
-LCFS_rztol=1E-4
+#parameters for finding the surface
+surf_psin=1E0 #normalized psi, psin=1 for the LCFS
+surf_psitol=1E-5
+surf_rztol=1E-4
 #tolerance parameters for determing whether the orbit has crossed the LCFS
 cross_psitol=0.0025 #percentage
 cross_rztol=0.005 #centimeter

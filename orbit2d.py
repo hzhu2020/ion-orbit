@@ -7,8 +7,8 @@ from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,deb
 
 def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   #prepare the axis position
-  ra=var.rLCFS[0]-var.dist[0]*math.cos(var.theta[0])
-  za=var.zLCFS[0]-var.dist[0]*math.sin(var.theta[0])
+  ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
+  za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
 
   r=np.sqrt(x**2+y**2)
   Bmag=myinterp.TwoD(var.Bmag,r,z)
@@ -98,15 +98,15 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     if np.isnan(r): break
 
     tau=tau+dt_orb
-    #check if the orbit has crossed the LCFS
+    #check if the orbit has crossed the surface
     psi=myinterp.TwoD(var.psi2d,r,z)
     theta=math.atan2(z-za,r-ra)
     if theta<=var.theta[0]: theta=theta+2*np.pi
     dist=np.sqrt((r-ra)**2+(z-za)**2)
-    dist_LCFS=myinterp.OneD_NL(var.theta,var.dist,theta)
+    dist_surf=myinterp.OneD_NL(var.theta,var.dist,theta)
     if (psi>(1+cross_psitol)*var.psix) \
        or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol)\
-       or (dist>dist_LCFS*(1+cross_disttol)):
+       or (dist>dist_surf*(1+cross_disttol)):
       break
     #end of the time loop
 

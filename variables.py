@@ -25,13 +25,13 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
 
 def init(potfac,Nr,Nz,pot00_step,comm,rank):
   #read mesh
-  global rlin,zlin,R,Z,psi2d,psix,Ra,Ba,rLCFS,zLCFS,theta,dist
+  global rlin,zlin,R,Z,psi2d,psix,Ra,Ba,rsurf,zsurf,theta,dist
   if rank==0:
-    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist=setup.Grid(Nr,Nz)
+    rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist=setup.Grid(Nr,Nz)
   else:
-    rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist=[None]*10
-  rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist\
-            =comm.bcast((rz,psi_rz,rx,zx,psix,Ba,rLCFS,zLCFS,theta,dist),root=0)
+    rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist=[None]*10
+  rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist\
+            =comm.bcast((rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist),root=0)
   rmesh=rz[:,0]
   zmesh=rz[:,1]
   rlin=np.linspace(min(rmesh),max(rmesh),Nr)
@@ -80,13 +80,13 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
 
 def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
   global Hmin,Hmax,dH
-  nLCFS=np.size(rLCFS)#number of mesh points along the LCFS
-  BLCFS=np.zeros((nLCFS,),dtype=float)#magnitude of B 
-  covbphiLCFS=np.zeros((nLCFS,),dtype=float)#covariant component \vec{b}\cdot(dX/d\phi)
-  for i in range(nLCFS):
-    r,z=rLCFS[i],zLCFS[i]
-    BLCFS[i]=varTwoD(R,Z,Bmag,r,z)
-    covbphiLCFS[i]=r*varTwoD(R,Z,Bphi,r,z)/BLCFS[i]
+  nsurf=np.size(rsurf)#number of mesh points along the LCFS
+  Bsurf=np.zeros((nsurf,),dtype=float)#magnitude of B 
+  covbphisurf=np.zeros((nsurf,),dtype=float)#covariant component \vec{b}\cdot(dX/d\phi)
+  for i in range(nsurf):
+    r,z=rsurf[i],zsurf[i]
+    Bsurf[i]=varTwoD(R,Z,Bmag,r,z)
+    covbphisurf[i]=r*varTwoD(R,Z,Bphi,r,z)/Bsurf[i]
   Hmin=np.zeros((nmu,nPphi),dtype=float)
   Hmax=np.zeros((nmu,nPphi),dtype=float)
   dH=np.zeros((nmu,nPphi,nH),dtype=float)
@@ -97,34 +97,36 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
   z_end=np.zeros((nmu,nPphi,nH),dtype=float)
   for imu in range(nmu):
     for iPphi in range(nPphi):
-      HLCFS=np.zeros((nLCFS,),dtype=float)
-      for iLCFS in range(nLCFS): 
-        #The zonal potential does not show up in H. TODO: including m/=0 potential.
-        HLCFS[iLCFS]=(Pphi_arr[iPphi]-qi*psix)**2/covbphiLCFS[iLCFS]**2/2/mi+mu_arr[imu]*BLCFS[iLCFS]
-      Hmin[imu,iPphi],minloc=min(HLCFS),np.argmin(HLCFS)
-      Hmax[imu,iPphi],maxloc=max(HLCFS),np.argmax(HLCFS)
+      Hsurf=np.zeros((nsurf,),dtype=float)
+      #The zonal potential does not show up in H. TODO: including m/=0 potential.
+      for isurf in range(nsurf): 
+        Hsurf[isurf]=(Pphi_arr[iPphi]-qi*psix)**2/covbphisurf[isurf]**2/2/mi+mu_arr[imu]*Bsurf[isurf]
+     
+      Hmin[imu,iPphi],minloc=min(Hsurf),np.argmin(Hsurf)
+      Hmax[imu,iPphi],maxloc=max(Hsurf),np.argmax(Hsurf)
       diH=math.floor((maxloc-minloc)/(nH+2))
       for iH in range(nH):
-        iLCFS=minloc+diH*(iH+1)
-        dH[imu,iPphi,iH]=0.5*(HLCFS[iLCFS+diH]-HLCFS[iLCFS-diH])
-        r_beg[imu,iPphi,iH]=rLCFS[iLCFS]
-        z_beg[imu,iPphi,iH]=zLCFS[iLCFS]
-        if HLCFS[iLCFS]<=HLCFS[0]:
-          endloc=np.argmin(abs(HLCFS[0:minloc]-HLCFS[iLCFS]))
+        isurf=minloc+diH*(iH+1)
+        dH[imu,iPphi,iH]=0.5*(Hsurf[isurf+diH]-Hsurf[isurf-diH])
+        r_beg[imu,iPphi,iH]=rsurf[isurf]
+        z_beg[imu,iPphi,iH]=zsurf[isurf]
+        if Hsurf[isurf]<=Hsurf[0]:
+          endloc=np.argmin(abs(Hsurf[0:minloc]-Hsurf[isurf]))
         else:
-          endloc=maxloc+np.argmin(abs(HLCFS[maxloc:]-HLCFS[iLCFS]))
-        if HLCFS[iLCFS]>=HLCFS[endloc]:
-          wH=(HLCFS[iLCFS]-HLCFS[endloc])/(HLCFS[endloc-1]-HLCFS[endloc])
-          r_end[imu,iPphi,iH]=(1-wH)*rLCFS[endloc]+wH*rLCFS[endloc-1]
-          z_end[imu,iPphi,iH]=(1-wH)*zLCFS[endloc]+wH*zLCFS[endloc-1]
+          endloc=maxloc+np.argmin(abs(Hsurf[maxloc:]-Hsurf[isurf]))
+
+        if Hsurf[isurf]>=Hsurf[endloc]:
+          wH=(Hsurf[isurf]-Hsurf[endloc])/(Hsurf[endloc-1]-Hsurf[endloc])
+          r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[endloc-1]
+          z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[endloc-1]
         else:
-          if endloc==nLCFS-1:
+          if endloc==nsurf-1:
             nextloc=0
           else:
             nextloc=endloc+1
-          wH=(HLCFS[iLCFS]-HLCFS[endloc])/(HLCFS[nextloc]-HLCFS[endloc])
-          r_end[imu,iPphi,iH]=(1-wH)*rLCFS[endloc]+wH*rLCFS[nextloc]
-          z_end[imu,iPphi,iH]=(1-wH)*zLCFS[endloc]+wH*zLCFS[nextloc]
+          wH=(Hsurf[isurf]-Hsurf[endloc])/(Hsurf[nextloc]-Hsurf[endloc])
+          r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[nextloc]
+          z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[nextloc]
   return r_beg,z_beg,r_end,z_end
 
 def H2d(mu,Pphi,mi,qi):
