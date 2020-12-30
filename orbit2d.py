@@ -13,7 +13,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   r=np.sqrt(x**2+y**2)
   Bmag=myinterp.TwoD(var.Bmag,r,z)
   Bphi=myinterp.TwoD(var.Bphi,r,z)
-  vp=(Pphi-qi*var.psix)/mi/r/Bphi*Bmag
+  vp=(Pphi-qi*var.psi_surf)/mi/r/Bphi*Bmag
   H,dHdr,dHdz=var.H2d(mu,Pphi,mi,qi)
   H0=myinterp.TwoD(H,r,z)
 
@@ -42,7 +42,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
       #did not work well. Turned it off until further update
       if False:
         psin=myinterp.TwoD(var.psi2d,r,z)/var.psix
-        #fac=0.01*math.exp(-5E3*(psin-0.98)**2)
+        fac=0
         Hc=myinterp.TwoD(H,r,z)
         print(Hc)
         dHdrc=myinterp.TwoD(dHdr,r,z)
@@ -104,7 +104,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     if theta<=var.theta[0]: theta=theta+2*np.pi
     dist=np.sqrt((r-ra)**2+(z-za)**2)
     dist_surf=myinterp.OneD_NL(var.theta,var.dist,theta)
-    if (psi>(1+cross_psitol)*var.psix) \
+    if (psi>(1+cross_psitol)*var.psi_surf) \
        or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol)\
        or (dist>dist_surf*(1+cross_disttol)):
       break
@@ -144,8 +144,12 @@ def rhs(qi,mi,r,z,mu,vp):
     bphi=Bphi/Bmag
     bz=Bz/Bmag
     #E
-    Er=myinterp.TwoD(var.Er,r,z)
-    Ez=myinterp.TwoD(var.Ez,r,z)
+    Er00=myinterp.TwoD(var.Er00,r,z)
+    Ez00=myinterp.TwoD(var.Ez00,r,z)
+    Er0m=myinterp.TwoD(var.Er0m,r,z)
+    Ez0m=myinterp.TwoD(var.Ez0m,r,z)
+    Er=Er00+Er0m
+    Ez=Ez00+Ez0m
     #gradB
     gradBr=myinterp.TwoD(var.gradBr,r,z)
     gradBz=myinterp.TwoD(var.gradBz,r,z)
@@ -156,9 +160,9 @@ def rhs(qi,mi,r,z,mu,vp):
     #equation of motion
     rhop=mi*vp/qi/Bmag
     D=1.+rhop*(br*curlbr+bz*curlbz+bphi*curlbphi)
-    #need to add dot(b,nonzonal E) in the future
+    #dvpdt does not contain dot(b,E00), which is by definition zero
     dvpdt=mu*(br*gradBr+bz*gradBz)+rhop*mu*(curlbr*gradBr+curlbz*gradBz)\
-          -qi*rhop*(curlbr*Er+curlbz*Ez)
+          -qi*rhop*(curlbr*Er+curlbz*Ez)-qi*(br*Er0m+bz*Ez0m)
     dvpdt=dvpdt/(-mi*D)
     drdt=vp*br+vp*rhop*curlbr+Bphi*(mu*gradBz-qi*Ez)/qi/Bmag**2
     drdt=drdt/D

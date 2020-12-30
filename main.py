@@ -2,7 +2,7 @@ import numpy as np
 import math
 import setup
 import myinterp
-from parameters import qi,mi,f0_vp_max,f0_smu_max,potfac,temp_step,pot00_step,\
+from parameters import qi,mi,f0_vp_max,f0_smu_max,pot00fac,pot0mfac,temp_step,pot00_step,\
                        Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,twod
 import variables as var
 from mpi4py import MPI
@@ -24,7 +24,7 @@ else:
   Ta=None
 Ta=comm.bcast(Ta,root=0)
 vt=np.sqrt(qi*Ta/mi) #thermal speed
-var.init(potfac,Nr,Nz,pot00_step,comm,rank)
+var.init(pot00fac,pot0mfac,Nr,Nz,pot00_step,comm,rank)
 myinterp.init(var.R,var.Z)
 if (debug) and (rank==0):
   plots.plotEB()
@@ -37,15 +37,32 @@ mu_arr[0]=mu_arr[1]/2 #to avoid zero mu
 vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
 #vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0
 if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
-  Pphi_arr=mi*var.Ra*vphi_arr+qi*var.psix
+  Pphi_arr=mi*var.Ra*vphi_arr+qi*var.psi_surf
 else:
-  Pphi_arr=-mi*var.Ra*vphi_arr+qi*var.psix
+  Pphi_arr=-mi*var.Ra*vphi_arr+qi*var.psi_surf
 #H array
 if rank==0:
   r_beg,z_beg,r_end,z_end=var.H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr)
 else:
   r_beg,z_beg,r_end,z_end=[None]*4
 r_beg,z_beg,r_end,z_end=comm.bcast((r_beg,z_beg,r_end,z_end),root=0)
+#output arrays for integration
+if rank==0:
+  dmu=mu_arr[0]*2
+  dPphi=Pphi_arr[1]-Pphi_arr[0]
+  output=open('integral.txt','w')
+  output.write('%19.10E %19.10E\n'%(dmu,dPphi))
+  count=0
+  for imu in range(nmu):
+    for iPphi in range(nPphi):
+      for iH in range(nH):
+        count=count+1
+        value=var.dH[imu,iPphi,iH]
+        output.write('%19.10E'%value)
+        if count%4==0: output.write('\n')
+  if count%4!=0: output.write('\n')
+  output.write('%8d\n'%-1)
+  output.close()
 #partition orbits among processes
 if rank==0:
   norb=nmu*nPphi*nH

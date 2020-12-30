@@ -66,8 +66,7 @@ def Grid(Nr,Nz):
   Rsurf=Rsurf[idx]
   Zsurf=Zsurf[idx]
   dist=dist[idx]
-  print('nsurf=',np.size(Rsurf))
-  return rz,psi_rz,rx,zx,psix,Ba,Rsurf,Zsurf,theta,dist
+  return rz,psi_rz,rx,zx,psix*surf_psin,Ba,Rsurf,Zsurf,theta,dist
   
 def Tempix(step):
   #get ion equilibrium temperature at the LCFS
@@ -91,7 +90,6 @@ def Tempix(step):
   Ta=np.nan
   for i in range(np.size(psi)):
     if abs(psi[i]-surf_psin)<surf_psitol: Ta=Tperp[i]
-  print('Ta=',Ta)
   return Ta
 
 def Grad(r,z,fld,Nr,Nz):
@@ -158,3 +156,18 @@ def Pot00(step):
     f.close()
 
   return psi00,pot00_1d
+
+def Pot0m(rz,rlin,zlin):
+  fname=input_dir+'/pot0m.txt'
+  fid=open(fname,'r')
+  nnodes=int(fid.readline())
+  Pot0m=np.nan*np.zeros((nnodes,),dtype=float)
+  for i in range(nnodes):
+    Pot0m[i]=float(fid.readline())
+  
+  end_flag=int(fid.readline())
+  if (end_flag!=-1)or(nnodes!=np.size(rz)/2): print('Something wrong with pot0m.txt!')
+  R,Z=np.meshgrid(rlin,zlin)
+  pot0m=griddata(rz,Pot0m,(R,Z),method=interp_method)
+   
+  return pot0m

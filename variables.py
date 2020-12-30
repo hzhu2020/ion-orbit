@@ -23,15 +23,15 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
 
   return fout
 
-def init(potfac,Nr,Nz,pot00_step,comm,rank):
+def init(pot00fac,pot0mfac,Nr,Nz,pot00_step,comm,rank):
   #read mesh
-  global rlin,zlin,R,Z,psi2d,psix,Ra,Ba,rsurf,zsurf,theta,dist
+  global rlin,zlin,R,Z,psi2d,psi_surf,Ra,Ba,rsurf,zsurf,theta,dist
   if rank==0:
-    rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist=setup.Grid(Nr,Nz)
+    rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist=setup.Grid(Nr,Nz)
   else:
-    rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist=[None]*10
-  rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist\
-            =comm.bcast((rz,psi_rz,rx,zx,psix,Ba,rsurf,zsurf,theta,dist),root=0)
+    rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist=[None]*10
+  rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist\
+            =comm.bcast((rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist),root=0)
   rmesh=rz[:,0]
   zmesh=rz[:,1]
   rlin=np.linspace(min(rmesh),max(rmesh),Nr)
@@ -51,7 +51,7 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
   bz=Bz/Bmag
   bphi=Bphi/Bmag
   #calculate grad B, curl B, and curl b
-  global gradBr,gradBz,gradBphi,curlBr,curlBz,curlBphi,curlbr,curlbz,curlbphi,pot00_2d
+  global gradBr,gradBz,gradBphi,curlBr,curlBz,curlBphi,curlbr,curlbz,curlbphi,pot00_2d,pot0m
   gradBr,gradBz,gradBphi=setup.Grad(rlin,zlin,Bmag,Nr,Nz)
   curlBr,curlBz,curlBphi=setup.Curl(rlin,zlin,Br,Bz,Bphi,Nr,Nz)
   curlbr,curlbz,curlbphi=setup.Curl(rlin,zlin,br,bz,bphi,Nr,Nz)
@@ -67,16 +67,28 @@ def init(potfac,Nr,Nz,pot00_step,comm,rank):
     for j in range(1,Nr-1):
       psi=varTwoD(R,Z,psi2d,rlin[j],zlin[i])
       if not(np.isnan(psi)) and (psi<max(psi00)) and (psi>min(psi00)):
-        pot00_2d[i,j]=potfac*pot_interp(psi)
+        pot00_2d[i,j]=pot00fac*pot_interp(psi)
       else:
         pot00_2d[i,j]=np.nan
- 
+  #read 2d pot0m and interpolate it to 2D
+  if rank==0:
+    pot0m=pot0mfac*setup.Pot0m(rz,rlin,zlin)
+  else:
+    pot0m=None
+  pot0m=comm.bcast(pot0m,root=0)
+
   #calculate E=-grad phi TODO: including gyroaverage of E
-  global Er,Ez,Ephi
-  Er,Ez,Ephi=setup.Grad(rlin,zlin,pot00_2d,Nr,Nz)
-  Er=-Er
-  Ez=-Ez
-  Ephi=-Ephi
+  global Er00,Ez00,Ephi00
+  Er00,Ez00,Ephi00=setup.Grad(rlin,zlin,pot00_2d,Nr,Nz)
+  Er00=-Er00
+  Ez00=-Ez00
+  Ephi00=-Ephi00
+  
+  global Er0m,Ez0m,Ephi0m
+  Er0m,Ez0m,Ephi0m=setup.Grad(rlin,zlin,pot0m,Nr,Nz)
+  Er0m=-Er0m
+  Ez0m=-Ez0m
+  Ephi0m=-Ephi0m
 
 def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
   global Hmin,Hmax,dH
@@ -100,7 +112,7 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
       Hsurf=np.zeros((nsurf,),dtype=float)
       #The zonal potential does not show up in H. TODO: including m/=0 potential.
       for isurf in range(nsurf): 
-        Hsurf[isurf]=(Pphi_arr[iPphi]-qi*psix)**2/covbphisurf[isurf]**2/2/mi+mu_arr[imu]*Bsurf[isurf]
+        Hsurf[isurf]=(Pphi_arr[iPphi]-qi*psi_surf)**2/covbphisurf[isurf]**2/2/mi+mu_arr[imu]*Bsurf[isurf]
      
       Hmin[imu,iPphi],minloc=min(Hsurf),np.argmin(Hsurf)
       Hmax[imu,iPphi],maxloc=max(Hsurf),np.argmax(Hsurf)
@@ -131,6 +143,6 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
 
 def H2d(mu,Pphi,mi,qi):
   vp2d=(Pphi-qi*psi2d)/mi/R/Bphi*Bmag
-  H=mu*Bmag+0.5*mi*vp2d**2+qi*pot00_2d
+  H=mu*Bmag+0.5*mi*vp2d**2+qi*(pot00_2d+pot0m)
   gradHr,gradHz,gradHphi=setup.Grad(rlin,zlin,H,rlin.size,zlin.size)
   return H,gradHr,gradHz 
