@@ -1,4 +1,5 @@
-from parameters import adios_version,input_dir,surf_psin,surf_psitol,surf_rztol,interp_method
+from parameters import adios_version,input_dir,pot_file,\
+                       surf_psin,surf_psitol,surf_rztol,interp_method
 if adios_version==1:
   import adios as ad
 elif adios_version==2:
@@ -71,29 +72,6 @@ def Grid(Nr,Nz):
   dist=dist[idx]
   return rz,psi_rz,rx,zx,psix*surf_psin,Ba,Rsurf,Zsurf,theta,dist
   
-def Tempix(step):
-  #get ion equilibrium temperature at the LCFS
-  if adios_version==1:
-    fname=input_dir+'/xgc.oneddiag.bp'
-    f=ad.file(fname)
-    psi=f['psi'].read() #psi is normalized
-    Tperp=f['i_perp_temperature_df_1d'].read()
-    f.close()
-    psi=np.array(psi[0,:])
-    Tperp=np.array(Tperp[step,:])
-  elif adios_version==2:
-    fname=input_dir+'/xgc.oneddiag.bp'
-    f=ad.open(fname,'r')
-    psi=f.read('psi') #psi is normalized
-    Tperp=f.read('i_perp_temperature_df_1d',start=[0],count=[psi.size],step_start=step,step_count=1)
-    f.close()
-    psi=np.array(psi)
-    Tperp=np.squeeze(Tperp)
-
-  Ta=np.nan
-  for i in range(np.size(psi)):
-    if abs(psi[i]-surf_psin)<surf_psitol: Ta=Tperp[i]
-  return Ta
 
 def Grad(r,z,fld,Nr,Nz):
   dr=r[2]-r[1]
@@ -140,37 +118,17 @@ def Bfield(rz,rlin,zlin):
   Bphi=griddata(rz,B[:,2],(R,Z),method=interp_method)
   return Br,Bz,Bphi
 
-def Pot00(step):
+def Pot(rz,rlin,zlin):
   if adios_version==1:
-    fname=input_dir+'/xgc.oneddiag.bp'
-    f=ad.file(fname)
-    psi00=f['psi00'].read()
-    pot00=f['pot00_1d'].read()
-    f.close()
-    psi00=np.array(psi00[0,:])
-    pot00_1d=np.array(pot00[step,:])
+    print('Not added yet.')
   elif adios_version==2:
-    fname=input_dir+'/xgc.oneddiag.bp'
+    fname=input_dir+'/'+pot_file
     f=ad.open(fname,'r')
-    psi00=f.read('psi00')
-    pot00_1d=f.read('pot00_1d',start=[0],count=[psi00.size],step_start=step,step_count=1)
-    psi00=np.array(psi00)
-    pot00_1d=np.squeeze(pot00_1d)
+    pot0=f.read('pot0')
+    dpot=f.read('dpot')
     f.close()
-
-  return psi00,pot00_1d
-
-def Pot0m(rz,rlin,zlin):
-  fname=input_dir+'/pot0m.txt'
-  fid=open(fname,'r')
-  nnodes=int(fid.readline())
-  Pot0m=np.nan*np.zeros((nnodes,),dtype=float)
-  for i in range(nnodes):
-    Pot0m[i]=float(fid.readline())
-  
-  end_flag=int(fid.readline())
-  if (end_flag!=-1)or(nnodes!=np.size(rz)/2): print('Something wrong with pot0m.txt!')
-  R,Z=np.meshgrid(rlin,zlin)
-  pot0m=griddata(rz,Pot0m,(R,Z),method=interp_method)
-   
-  return pot0m
+    #dpot=np.mean(dpot,axis=1) #TODO need to add this for XGC1
+    R,Z=np.meshgrid(rlin,zlin)
+    pot02d=griddata(rz,pot0,(R,Z),method=interp_method)
+    dpot2d=griddata(rz,dpot,(R,Z),method=interp_method)
+  return pot02d,dpot2d

@@ -23,7 +23,7 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
 
   return fout
 
-def init(pot00fac,pot0mfac,Nr,Nz,pot00_step,comm,rank):
+def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   #read mesh
   global rlin,zlin,R,Z,psi2d,psi_surf,Ra,Ba,rsurf,zsurf,theta,dist
   if rank==0:
@@ -51,41 +51,27 @@ def init(pot00fac,pot0mfac,Nr,Nz,pot00_step,comm,rank):
   bz=Bz/Bmag
   bphi=Bphi/Bmag
   #calculate grad B, curl B, and curl b
-  global gradBr,gradBz,gradBphi,curlBr,curlBz,curlBphi,curlbr,curlbz,curlbphi,pot00_2d,pot0m
+  global gradBr,gradBz,gradBphi,curlBr,curlBz,curlBphi,curlbr,curlbz,curlbphi,pot0,dpot
   gradBr,gradBz,gradBphi=setup.Grad(rlin,zlin,Bmag,Nr,Nz)
   curlBr,curlBz,curlBphi=setup.Curl(rlin,zlin,Br,Bz,Bphi,Nr,Nz)
   curlbr,curlbz,curlbphi=setup.Curl(rlin,zlin,br,bz,bphi,Nr,Nz)
-  #read 1d pot00 and interpolate it to 2D
   if rank==0:
-    psi00,pot00_1d=setup.Pot00(pot00_step)
+    pot0,dpot=setup.Pot(rz,rlin,zlin)
+    pot0=pot0fac*pot0
+    dpot=dpotfac*dpot
   else:
-    psi00,pot00_1d=None,None
-  psi00,pot00_1d=comm.bcast((psi00,pot00_1d),root=0)
-  pot_interp=interp1d(psi00,pot00_1d,kind=interp_method)
-  pot00_2d=np.nan*np.zeros((Nz,Nr),dtype=float)
-  for i in range(1,Nz-1):
-    for j in range(1,Nr-1):
-      psi=varTwoD(R,Z,psi2d,rlin[j],zlin[i])
-      if not(np.isnan(psi)) and (psi<max(psi00)) and (psi>min(psi00)):
-        pot00_2d[i,j]=pot00fac*pot_interp(psi)
-      else:
-        pot00_2d[i,j]=np.nan
-  #read 2d pot0m and interpolate it to 2D
-  if rank==0:
-    pot0m=pot0mfac*setup.Pot0m(rz,rlin,zlin)
-  else:
-    pot0m=None
-  pot0m=comm.bcast(pot0m,root=0)
+    pot0,dpot=[None]*2
+  pot0,dpot=comm.bcast((pot0,dpot),root=0)
 
   #calculate E=-grad phi TODO: including gyroaverage of E
   global Er00,Ez00,Ephi00
-  Er00,Ez00,Ephi00=setup.Grad(rlin,zlin,pot00_2d,Nr,Nz)
+  Er00,Ez00,Ephi00=setup.Grad(rlin,zlin,pot0,Nr,Nz)
   Er00=-Er00
   Ez00=-Ez00
   Ephi00=-Ephi00
   
   global Er0m,Ez0m,Ephi0m
-  Er0m,Ez0m,Ephi0m=setup.Grad(rlin,zlin,pot0m,Nr,Nz)
+  Er0m,Ez0m,Ephi0m=setup.Grad(rlin,zlin,dpot,Nr,Nz)
   Er0m=-Er0m
   Ez0m=-Ez0m
   Ephi0m=-Ephi0m
@@ -143,6 +129,6 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
 
 def H2d(mu,Pphi,mi,qi):
   vp2d=(Pphi-qi*psi2d)/mi/R/Bphi*Bmag
-  H=mu*Bmag+0.5*mi*vp2d**2+qi*(pot00_2d+pot0m)
+  H=mu*Bmag+0.5*mi*vp2d**2+qi*(pot0+dpot)
   gradHr,gradHz,gradHphi=setup.Grad(rlin,zlin,H,rlin.size,zlin.size)
   return H,gradHr,gradHz 

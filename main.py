@@ -2,7 +2,7 @@ import numpy as np
 import math
 import setup
 import myinterp
-from parameters import qi,mi,Ti,f0_vp_max,f0_smu_max,pot00fac,pot0mfac,temp_step,pot00_step,\
+from parameters import qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
                        Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,twod
 import variables as var
 from mpi4py import MPI
@@ -19,7 +19,7 @@ size = comm.Get_size()
 rank = comm.Get_rank()
 #initialize some global variables
 vt=np.sqrt(1.60217552E-19*Ti/mi) #thermal speed
-var.init(pot00fac,pot0mfac,Nr,Nz,pot00_step,comm,rank)
+var.init(pot0fac,dpotfac,Nr,Nz,comm,rank)
 myinterp.init(var.R,var.Z)
 if (debug) and (rank==0):
   plots.plotEB()

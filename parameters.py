@@ -6,15 +6,12 @@ Ti=800#ion temperature in eV
 #f0_vp/smu_max could be the same as in the XGC input, but not's not required
 f0_vp_max=4.0 #maximum v_\para normalized by vt
 f0_smu_max=4.0 #maximum v_\perp normliaed by vt
-pot00fac=1. #factor that reduces 00 E field
-pot0mfac=0. #factor that reduces 0m E field
+pot0fac=1. #factor that reduces 00 E field
+dpotfac=1. #factor that reduces turb E field
 #input directory containing adios bp files
 input_dir='input_dir'
 adios_version=2
-#which time step from XGC output to use for the temperature and zonal potential;
-#the step index starts from 0
-temp_step=0 
-pot00_step=999 
+pot_file='xgc.2d.02000.bp'
 #number of uniform grid points in r and z
 Nr=500
 Nz=500
