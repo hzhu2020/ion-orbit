@@ -2,7 +2,7 @@ import numpy as np
 import math
 import setup
 import myinterp
-from parameters import qi,mi,f0_vp_max,f0_smu_max,pot00fac,pot0mfac,temp_step,pot00_step,\
+from parameters import qi,mi,Ti,f0_vp_max,f0_smu_max,pot00fac,pot0mfac,temp_step,pot00_step,\
                        Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,twod
 import variables as var
 from mpi4py import MPI
@@ -18,12 +18,7 @@ comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
 #initialize some global variables
-if rank==0: 
-  Ta=setup.Tempix(temp_step)
-else:
-  Ta=None
-Ta=comm.bcast(Ta,root=0)
-vt=np.sqrt(qi*Ta/mi) #thermal speed
+vt=np.sqrt(1.60217552E-19*Ti/mi) #thermal speed
 var.init(pot00fac,pot0mfac,Nr,Nz,pot00_step,comm,rank)
 myinterp.init(var.R,var.Z)
 if (debug) and (rank==0):

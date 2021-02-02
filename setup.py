@@ -41,7 +41,10 @@ def Grid(Nr,Nz):
     ra=f.read('eq_axis_r')
     za=f.read('eq_axis_z')
     f.close()
-  #find the LCFS
+  #find the surface closest to given surf_psin
+  global surf_psin #need to claim it global since its value is changed below
+  minloc=np.argmin(abs(psi_rz-psix*surf_psin))
+  surf_psin=psi_rz[minloc]/psix
   Rsurf=np.array([],dtype=float)
   Zsurf=np.array([],dtype=float)
   for i in range(np.shape(rz)[0]):
