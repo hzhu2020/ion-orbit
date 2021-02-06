@@ -54,6 +54,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
         r_orb1[step_count]=r
         z_orb1[step_count]=z
         vp_orb1[step_count]=vp
+
       step_count=step_count+1
       if debug:
         debug_count=debug_count+1
