@@ -1,4 +1,3 @@
-twod=True #if true, only consider poloidal trajectories for axisymmetric torus
 #All paramers are in mks unit except Ti
 qi=1.60217662E-19#ion charge
 mi=2*1.67262192369E-27#ion mass
