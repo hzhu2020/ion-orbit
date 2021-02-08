@@ -1,2 +1,2 @@
 # ion-orbit
-The file parameters.py contains input parameters and does not need be regularly staged.
+3D version of the code

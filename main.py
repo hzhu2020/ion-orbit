@@ -3,15 +3,12 @@ import math
 import setup
 import myinterp
 from parameters import qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
-                       Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,twod
+                       Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug
 import variables as var
 from mpi4py import MPI
 import plots
 import time
-if twod:
-  import orbit2d as orbit
-else:
-  import orbit3d as orbit
+import orbit3d as orbit
 
 #MPI is automatically initialized when imported; likewise, no need to call finalize.
 comm = MPI.COMM_WORLD
