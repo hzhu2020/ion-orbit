@@ -5,7 +5,9 @@ import math
 import os
 from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir
 
-def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
+def tau_orb(iorb,qi,mi,x_beg,y,z_beg,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
+  x=x_beg
+  z=z_beg
   #prepare the axis position
   ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
   za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
@@ -28,6 +30,8 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   r=np.sqrt(x**2+y**2)
   tau=0
   step_count=0
+  num_cross=0 #number of times the orbit has crossed the surface
+  lost=False #whether the particle is lost to the wall
   #step_flag=True
   if debug:
     debug_count=0
@@ -36,7 +40,9 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     output.write('%8d\n'%0)#a placeholder for debug_count
  
   for it in range(np.int(max_step)):
-    if np.isnan(r): break
+    if np.isnan(r):
+      if num_cross==1: lost=True
+      break
     if math.floor(tau/dt_xgc)==step_count:
       #make a correction of position based on H deviation
       #did not work well. Turned it off until further update
@@ -71,7 +77,9 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     vpc=vp+dvpdtc*dt_orb/2
     rc=r+drdtc*dt_orb/2
     zc=z+dzdtc*dt_orb/2
-    if np.isnan(rc): break
+    if np.isnan(rc):
+      if num_cross==1: lost=True
+      break
     #RK4 2nd step
     drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
     dvpdte=dvpdte+dvpdtc/3
@@ -79,7 +87,9 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     dzdte=dzdte+dzdtc/3
     rc=r+drdtc*dt_orb/2
     zc=z+dzdtc*dt_orb/2
-    if np.isnan(rc): break
+    if np.isnan(rc): 
+      if num_cross==1: lost=True
+      break
     #RK4 3nd step
     drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
     dvpdte=dvpdte+dvpdtc/3
@@ -87,7 +97,9 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     dzdte=dzdte+dzdtc/3
     rc=r+drdtc*dt_orb
     zc=z+dzdtc*dt_orb
-    if np.isnan(rc): break
+    if np.isnan(rc): 
+      if num_cross==1: lost=True
+      break
     #Rk4 4th step
     drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
     dvpdte=dvpdte+dvpdtc/6
@@ -96,7 +108,9 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     vp=vp+dvpdte*dt_orb
     r=r+drdte*dt_orb
     z=z+dzdte*dt_orb
-    if np.isnan(r): break
+    if np.isnan(r): 
+      if num_cross==1: lost=True
+      break
 
     tau=tau+dt_orb
     #check if the orbit has crossed the surface
@@ -105,12 +119,27 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     if theta<=var.theta[0]: theta=theta+2*np.pi
     dist=np.sqrt((r-ra)**2+(z-za)**2)
     dist_surf=myinterp.OneD_NL(var.theta,var.dist,theta)
-    if (psi>(1+cross_psitol)*var.psi_surf) \
+    if (num_cross==0) and (\
+       (psi>(1+cross_psitol)*var.psi_surf) \
        or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol)\
-       or (dist>dist_surf*(1+cross_disttol)):
+       or (dist>dist_surf*(1+cross_disttol))
+       ): num_cross==1 #first time cross (leave) the surface
+      
+    if (num_cross==1) and \
+       (psi<(1-cross_psitol)*var.psix) and\
+       (z<var.zx):
+      lost=True #assume lost if in the private region
+      break
+
+    if (num_cross==1) and (\
+       (psi<(1-cross_psitol)*var.psi_surf) \
+       or (np.sqrt((r-r_beg)**2+(z-z_beg)**2)<cross_rztol)\
+       or (dist<dist_surf*(1-cross_disttol))
+       ): 
+      num_cross==2 #second time cross (enter) the surface
       break
     #end of the time loop
-
+  print('lost:',lost)
   if step_count<=nt:
     dt_orb_out=dt_xgc
   else:
