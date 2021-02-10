@@ -44,7 +44,14 @@ def Grid(Nr,Nz):
     f.close()
   #find the surface closest to given surf_psin
   global surf_psin #need to claim it global since its value is changed below
-  minloc=np.argmin(abs(psi_rz-psix*surf_psin))
+  dpsi=1e10
+  #TODO caution: it's possible that the following will choose non-aligned nodes in the core
+  for i in range(np.shape(rz)[0]):
+    if (psi_rz[i]<psix+surf_psitol)\
+       and (rz[i,1]>zx-surf_rztol)\
+       and (abs(psi_rz[i]-psix*surf_psin)<dpsi):
+         dpsi=abs(psi_rz[i]-psix*surf_psin)
+         minloc=i
   surf_psin=psi_rz[minloc]/psix
   Rsurf=np.array([],dtype=float)
   Zsurf=np.array([],dtype=float)
