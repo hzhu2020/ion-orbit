@@ -5,9 +5,9 @@ import math
 import os
 from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir
 
-def tau_orb(iorb,qi,mi,x_beg,y,z_beg,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
-  x=x_beg
-  z=z_beg
+def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
+  r_beg=np.sqrt(x**2+y**2)
+  z_beg=z
   #prepare the axis position
   ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
   za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
@@ -123,7 +123,7 @@ def tau_orb(iorb,qi,mi,x_beg,y,z_beg,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
        (psi>(1+cross_psitol)*var.psi_surf) \
        or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol)\
        or (dist>dist_surf*(1+cross_disttol))
-       ): num_cross==1 #first time cross (leave) the surface
+       ): num_cross=1 #first time cross (leave) the surface
       
     if (num_cross==1) and \
        (psi<(1-cross_psitol)*var.psix) and\
@@ -135,11 +135,11 @@ def tau_orb(iorb,qi,mi,x_beg,y,z_beg,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
        (psi<(1-cross_psitol)*var.psi_surf) \
        or (np.sqrt((r-r_beg)**2+(z-z_beg)**2)<cross_rztol)\
        or (dist<dist_surf*(1-cross_disttol))
-       ): 
-      num_cross==2 #second time cross (enter) the surface
+       ):
+      num_cross=2 #second time cross (enter) the surface
       break
     #end of the time loop
-  print('lost:',lost)
+
   if step_count<=nt:
     dt_orb_out=dt_xgc
   else:

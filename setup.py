@@ -77,7 +77,7 @@ def Grid(Nr,Nz):
   Rsurf=Rsurf[idx]
   Zsurf=Zsurf[idx]
   dist=dist[idx]
-  return rz,psi_rz,rx,zx,psix*surf_psin,Ba,Rsurf,Zsurf,theta,dist
+  return rz,psi_rz,rx,zx,psix*surf_psin,psix,Ba,Rsurf,Zsurf,theta,dist
   
 
 def Grad(r,z,fld,Nr,Nz):

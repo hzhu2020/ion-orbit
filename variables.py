@@ -26,13 +26,13 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
 
 def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   #read mesh
-  global rlin,zlin,R,Z,psi2d,psi_surf,Ra,Ba,rsurf,zsurf,theta,dist,zx
+  global rlin,zlin,R,Z,psi2d,psi_surf,psix,Ra,Ba,rsurf,zsurf,theta,dist,zx
   if rank==0:
-    rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist=setup.Grid(Nr,Nz)
+    rz,psi_rz,rx,zx,psi_surf,psix,Ba,rsurf,zsurf,theta,dist=setup.Grid(Nr,Nz)
   else:
-    rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist=[None]*10
-  rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist\
-            =comm.bcast((rz,psi_rz,rx,zx,psi_surf,Ba,rsurf,zsurf,theta,dist),root=0)
+    rz,psi_rz,rx,zx,psi_surf,psix,Ba,rsurf,zsurf,theta,dist=[None]*11
+  rz,psi_rz,rx,zx,psi_surf,psix,Ba,rsurf,zsurf,theta,dist\
+            =comm.bcast((rz,psi_rz,rx,zx,psi_surf,psix,Ba,rsurf,zsurf,theta,dist),root=0)
   rmesh=rz[:,0]
   zmesh=rz[:,1]
   rlin=np.linspace(min(rmesh),max(rmesh),Nr)
