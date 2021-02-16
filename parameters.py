@@ -1,3 +1,5 @@
+#identify loss orbits
+determine_loss=True
 #All paramers are in mks unit except Ti
 qi=1.60217662E-19#ion charge
 mi=2*1.67262192369E-27#ion mass
@@ -18,9 +20,9 @@ Nz=500
 #options: 'linear', 'nearest', 'cubic'
 interp_method='cubic'
 #number of elements in mu, Pphi, H, and t
-nmu=40
-nPphi=40
-nH=40
+nmu=2
+nPphi=2
+nH=2
 nt=50
 dt_orb=5E-8 #time step size for the orbit integration
 max_step=2E4 #max number of time steps for orbit integration

@@ -3,7 +3,7 @@ import myinterp
 import numpy as np
 import math
 import os
-from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir
+from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
 
 def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   r_beg=np.sqrt(x**2+y**2)
@@ -43,19 +43,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     if np.isnan(r):
       if num_cross==1: lost=True
       break
-    if math.floor(tau/dt_xgc)==step_count:
-      #make a correction of position based on H deviation
-      #did not work well. Turned it off until further update
-      if False:
-        psin=myinterp.TwoD(var.psi2d,r,z)/var.psix
-        fac=0
-        Hc=myinterp.TwoD(H,r,z)
-        print(Hc)
-        dHdrc=myinterp.TwoD(dHdr,r,z)
-        dHdzc=myinterp.TwoD(dHdz,r,z)
-        r=r+fac*(H0-Hc)*dHdrc/(dHdrc**2+dHdzc**2)
-        z=z+fac*(H0-Hc)*dHdzc/(dHdrc**2+dHdzc**2)
-
+    if (math.floor(tau/dt_xgc)==step_count)and(num_cross==0):
       if step_count<nt:
         r_orb1[step_count]=r
         z_orb1[step_count]=z
@@ -123,8 +111,26 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
        (psi>(1+cross_psitol)*var.psi_surf) \
        or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol)\
        or (dist>dist_surf*(1+cross_disttol))
-       ): num_cross=1 #first time cross (leave) the surface
-      
+       ): 
+      #first time cross (leave) the surface: output orbits here
+      num_cross=1 
+      if step_count<=nt:
+        dt_orb_out=dt_xgc
+      else:
+        dt_orb_out=tau/np.float(nt)
+        step_count=nt
+        for it in range(nt):
+          t_ind=math.floor(np.float(it)*dt_orb_out/dt_orb)
+          wt=np.float(it)*dt_orb_out/dt_orb - t_ind
+          if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
+            t_ind=t_ind-1
+            wt=1.0
+          if abs(r_tmp[t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value 
+          r_orb1[it]=(1-wt)*r_tmp[t_ind]+wt*r_tmp[t_ind+1]
+          z_orb1[it]=(1-wt)*z_tmp[t_ind]+wt*z_tmp[t_ind+1]
+          vp_orb1[it]=(1-wt)*vp_tmp[t_ind]+wt*vp_tmp[t_ind+1]
+      if (not determine_loss): break
+
     if (num_cross==1) and \
        (psi<(1-cross_psitol)*var.psix) and\
        (z<var.zx):
@@ -137,24 +143,9 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
        or (dist<dist_surf*(1-cross_disttol))
        ):
       num_cross=2 #second time cross (enter) the surface
+      lost=False #redundantly setting lost=F
       break
     #end of the time loop
-
-  if step_count<=nt:
-    dt_orb_out=dt_xgc
-  else:
-    dt_orb_out=tau/np.float(nt)
-    step_count=nt
-    for it in range(nt):
-      t_ind=math.floor(np.float(it)*dt_orb_out/dt_orb)
-      wt=np.float(it)*dt_orb_out/dt_orb - t_ind
-      if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
-        t_ind=t_ind-1
-        wt=1.0
-      if abs(r_tmp[t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value 
-      r_orb1[it]=(1-wt)*r_tmp[t_ind]+wt*r_tmp[t_ind+1]
-      z_orb1[it]=(1-wt)*z_tmp[t_ind]+wt*z_tmp[t_ind+1]
-      vp_orb1[it]=(1-wt)*vp_tmp[t_ind]+wt*vp_tmp[t_ind+1]
 
   if debug:  
     output.write('%8d\n'%-1)
