@@ -6,6 +6,7 @@ import os
 from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
 
 def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
+  dt_orb_out=0.0
   r_beg=np.sqrt(x**2+y**2)
   z_beg=z
   #prepare the axis position
@@ -152,6 +153,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     output.seek(0)
     output.write('%8d\n'%debug_count)
     output.close()
+  if step_count>nt: step_count=1
   return lost,tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1
 
 def rhs(qi,mi,r,z,mu,vp):
