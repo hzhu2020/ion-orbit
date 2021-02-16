@@ -65,12 +65,10 @@ def Grid(Nr,Nz):
   for i in range(size):
     dist[i]=np.sqrt((Zsurf[i]-za)**2+(Rsurf[i]-ra)**2)
     theta[i]=math.atan2(Zsurf[i]-za,Rsurf[i]-ra)
-    #if (abs(ZLCFS[i]-zx)<surf_rztol)and(abs(RLCFS[i]-rx)<surf_rztol): thetax=theta[i]
 
   #pin the starting node of the surface at the bottom
   for i in range(size):
     if theta[i]<=-np.pi/2: theta[i]=theta[i]+2*np.pi
-    #if theta[i]<=thetax: theta[i]=theta[i]+2*np.pi
 
   idx=np.argsort(theta)
   theta=theta[idx]

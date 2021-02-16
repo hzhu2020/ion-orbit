@@ -3,7 +3,7 @@ import math
 import setup
 import myinterp
 from parameters import qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
-                       Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug
+                       Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,determine_loss
 import variables as var
 from mpi4py import MPI
 import plots
@@ -74,10 +74,10 @@ iorb2=iorb1+mynorb-1
 #determine orbit trajectories through RK4 integration
 r_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 z_orb=np.zeros((mynorb,nt),dtype=float,order='C')
-#phi_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 vp_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 steps_orb=np.zeros((mynorb,),dtype=int)
 dt_orb_out_orb=np.zeros((mynorb,),dtype=float)
+if determine_loss: loss_orb=np.zeros((mynorb,),dtype=int)
 if debug: tau_orb=np.zeros((mynorb,),dtype=float)
 t_beg_tot=time.time()
 for iorb in range(iorb1,iorb2+1):
@@ -88,16 +88,16 @@ for iorb in range(iorb1,iorb2+1):
   Pphi=Pphi_arr[iPphi]
   x,y,z=r_beg[imu,iPphi,iH],0,z_beg[imu,iPphi,iH]
   t_beg=time.time()
-  tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
+  lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_orb,dt_xgc,nt)
   t_end=time.time()
   print('rank=',rank,', orb=',iorb,', tau=',tau,', cpu time=',t_end-t_beg,'s',flush=True)
   r_orb[iorb-iorb1,:]=r_orb1
   z_orb[iorb-iorb1,:]=z_orb1
-  #phi_orb[iorb-iorb1,:]=phi_orb1
   vp_orb[iorb-iorb1,:]=vp_orb1
   steps_orb[iorb-iorb1]=step
   dt_orb_out_orb[iorb-iorb1]=dt_orb_out
+  if (lost)and(determine_loss): loss_orb[iorb-iorb1]=1
   if debug: tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
 #rank=0 gather data and output
@@ -106,24 +106,34 @@ if rank==0:
   count2=count1*nt
   steps_output=np.zeros((norb,),dtype=int)
   dt_orb_output=np.zeros((norb,),dtype=float)
+  if determine_loss: loss_output=np.zeros((norb,),dtype=int)
   if debug: tau_output=np.zeros((norb,),dtype=float)
   r_output=np.zeros((norb,nt),dtype=float,order='C')
   z_output=np.zeros((norb,nt),dtype=float,order='C')
-  #phi_output=np.zeros((norb,nt),dtype=float,order='C')
   vp_output=np.zeros((norb,nt),dtype=float,order='C')
 else:
+  if determine_loss: loss_output=None
   if debug: tau_output=None
   steps_output,dt_orb_output,r_output,z_output,vp_output,count1,count2=[None]*7
 comm.barrier()
 print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min')
 comm.Gatherv(steps_orb,(steps_output,count1),root=0)
 comm.Gatherv(dt_orb_out_orb,(dt_orb_output,count1),root=0)
+if determine_loss: comm.Gatherv(loss_orb,(loss_output,count1),root=0)
 if debug: comm.Gatherv(tau_orb,(tau_output,count1),root=0)
 comm.Gatherv(r_orb,(r_output,count2),root=0)
 comm.Gatherv(z_orb,(z_output,count2),root=0)
-#comm.Gatherv(phi_orb,(phi_output,count2),root=0)
 comm.Gatherv(vp_orb,(vp_output,count2),root=0)
 if rank==0:
+  #output which orbits are lost
+  if determine_loss:
+    output=open('lost.txt','w')
+    output.write('%8d%8d%8d\n'% (nmu,nPphi,nH))
+    for iorb in range(norb):
+      value=loss_output[iorb]
+      output.write('%1d\n'%value)
+    output.write('%8d\n'%-1)
+    output.close()
   #output tau separately for debug
   if debug:
     output=open('tau.txt','w')
@@ -178,15 +188,6 @@ if rank==0:
       output.write('%19.10E '%value)
       if count%4==0: output.write('\n')
   if count%4!=0: output.write('\n')
-  #phi_orb
-#  count=0
-#  for iorb in range(norb):
-#    for it in range(nt):
-#      count=count+1
-#      value=phi_output[iorb,it]
-#      output.write('%19.10E '%value)
-#      if count%4==0: output.write('\n')
-#  if count%4!=0: output.write('\n')
   #vp_orb
   count=0
   for iorb in range(norb):

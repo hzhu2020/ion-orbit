@@ -32,7 +32,6 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   step_count=0
   num_cross=0 #number of times the orbit has crossed the surface
   lost=False #whether the particle is lost to the wall
-  #step_flag=True
   if debug:
     debug_count=0
     if not(os.path.isdir(debug_dir)): os.mkdir(debug_dir)
@@ -43,16 +42,17 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     if np.isnan(r):
       if num_cross==1: lost=True
       break
-    if (math.floor(tau/dt_xgc)==step_count)and(num_cross==0):
-      if step_count<nt:
+    if math.floor(tau/dt_xgc)==step_count:
+      if (step_count<nt)and(num_cross==0):
         r_orb1[step_count]=r
         z_orb1[step_count]=z
         vp_orb1[step_count]=vp
 
-      step_count=step_count+1
-      if debug:
-        debug_count=debug_count+1
-        output.write('%19.10E %19.10E\n'%(r,z))
+      if num_cross==0: step_count=step_count+1
+
+    if(debug)and(it%math.floor(dt_xgc/dt_orb)==0):
+      debug_count=debug_count+1
+      output.write('%19.10E %19.10E\n'%(r,z))
       
     r_tmp[it]=r
     z_tmp[it]=z
@@ -152,7 +152,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     output.seek(0)
     output.write('%8d\n'%debug_count)
     output.close()
-  return tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1
+  return lost,tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1
 
 def rhs(qi,mi,r,z,mu,vp):
     #B
