@@ -201,3 +201,4 @@ if rank==0:
   output.write('%8d\n'%-1)
   output.close()
 #end of output from rank=0
+comm.barrier()
