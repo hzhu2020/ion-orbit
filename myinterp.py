@@ -25,7 +25,12 @@ def OneD(x1d,f1d,xin):
 def OneD_NL(x1d,f1d,xin):
   if xin<=x1d[0]: return f1d[0]
   Nx=np.size(x1d)
-  if xin>=x1d[Nx-1]: return f1d[Nx-1]
+  if xin>=x1d[Nx-1]:
+    #it's assumed that x1d is the poloidal angle \theta
+    wx=(xin-x1d[Nx-1])/(x1d[0]+2*np.pi-x1d[Nx-1])
+    fout=f1d[Nx-1]*(1-wx)+f1d[0]*wx
+    return fout
+
   dx=x1d[1]-x1d[0]  
   ix=math.floor((xin-x1d[0])/dx) #initial guess
   ix=min(ix,Nx-1)
