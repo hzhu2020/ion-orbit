@@ -51,6 +51,19 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   br=Br/Bmag
   bz=Bz/Bmag
   bphi=Bphi/Bmag
+  #pin the starting node of the surface at the top or bottom
+  if Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
+    theta0=+np.pi/2
+  else:
+    theta0=-np.pi/2
+  for i in range(np.size(theta)):
+    if theta[i]<=theta0: theta[i]=theta[i]+2*np.pi
+
+  idx=np.argsort(theta)
+  theta=theta[idx]
+  rsurf=rsurf[idx]
+  zsurf=zsurf[idx]
+  dist=dist[idx]
   #calculate grad B, curl B, and curl b
   global gradBr,gradBz,gradBphi,curlBr,curlBz,curlBphi,curlbr,curlbz,curlbphi,pot0,dpot
   gradBr,gradBz,gradBphi=setup.Grad(rlin,zlin,Bmag,Nr,Nz)
@@ -112,9 +125,12 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
         Hsurf[isurf]=(Pphi_arr[iPphi]-qi*psi_surf)**2/covbphisurf[isurf]**2/2/mi\
                      +mu_arr[imu]*Bsurf[isurf]+qi*dpotsurf[isurf]
 
+      #invert the sign of H if Bphi>0, so the entrance is always at \partial H/partial\theta>0
+      Nz,Nr=np.array(np.shape(Bphi))
+      if Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0: Hsurf=-Hsurf
+
       pks1,_=find_peaks(Hsurf)
       pks2,_=find_peaks(-Hsurf)
-      #TODO: the following assumes b_\varphi<0. Should include the opposite case later
       if (np.size(pks1)>1)or(np.size(pks2)>1):#rare cases when H has multiple peaks&troughs 
         multipeak[imu,iPphi]=1
         nsurf_tmp=0
