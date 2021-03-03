@@ -3,7 +3,8 @@ import math
 import setup
 import myinterp
 from parameters import qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
-                       Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,determine_loss
+                       Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,determine_loss,gyro_E
+if gyro_E: from parameters import ngyro
 import variables as var
 from mpi4py import MPI
 import plots
@@ -88,6 +89,15 @@ for iorb in range(iorb1,iorb2+1):
   Pphi=Pphi_arr[iPphi]
   x,y,z=r_beg[imu,iPphi,iH],0,z_beg[imu,iPphi,iH]
   t_beg=time.time()
+  if iorb==iorb1:
+    mu_old=mu
+    if gyro_E:
+      var.gyroE(mu,qi,mi,ngyro)
+      if debug: plots.plot_gyroE(imu)
+  else:
+    if (mu!=mu_old):
+      mu_old=mu
+      if gyro_E: var.gyroE(mu,qi,mi,ngyro)
   lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_orb,dt_xgc,nt)
   t_end=time.time()

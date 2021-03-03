@@ -3,7 +3,7 @@ import myinterp
 import numpy as np
 import math
 import os
-from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
+from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss,gyro_E
 
 def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   dt_orb_out=0.0
@@ -167,10 +167,16 @@ def rhs(qi,mi,r,z,mu,vp):
     bphi=Bphi/Bmag
     bz=Bz/Bmag
     #E
-    Er00=myinterp.TwoD(var.Er00,r,z)
-    Ez00=myinterp.TwoD(var.Ez00,r,z)
-    Er0m=myinterp.TwoD(var.Er0m,r,z)
-    Ez0m=myinterp.TwoD(var.Ez0m,r,z)
+    if gyro_E:
+      Er00=myinterp.TwoD(var.gyroEr00,r,z)
+      Ez00=myinterp.TwoD(var.gyroEz00,r,z)
+      Er0m=myinterp.TwoD(var.gyroEr0m,r,z)
+      Ez0m=myinterp.TwoD(var.gyroEz0m,r,z)
+    else:
+      Er00=myinterp.TwoD(var.Er00,r,z)
+      Ez00=myinterp.TwoD(var.Ez00,r,z)
+      Er0m=myinterp.TwoD(var.Er0m,r,z)
+      Ez0m=myinterp.TwoD(var.Ez0m,r,z)
     Er=Er00+Er0m
     Ez=Ez00+Ez0m
     #gradB

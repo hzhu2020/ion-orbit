@@ -10,6 +10,10 @@ def plotEB():
   if not(os.path.isdir(debug_dir)): os.mkdir(debug_dir)
   h=plt.figure()
   ax=plt.subplot(111)
+  ax.imshow(var.Er00,origin='lower')
+  plt.savefig(debug_dir+'/Er00.pdf')
+  ax.imshow(var.Er0m,origin='lower',vmin=-10,vmax=10)
+  plt.savefig(debug_dir+'/Er0m.pdf')
   ax.imshow(var.Ez00,origin='lower')
   plt.savefig(debug_dir+'/Ez00.pdf')
   ax.imshow(var.Ez0m,origin='lower',vmin=-10,vmax=10)
@@ -19,6 +23,19 @@ def plotEB():
   ax.imshow(var.Bmag,origin='lower')
   plt.savefig(debug_dir+'/Bmag.pdf')
   plt.close(h)
+
+def plot_gyroE(imu):
+  if not(os.path.isdir(debug_dir)): os.mkdir(debug_dir)
+  h=plt.figure()
+  ax=plt.subplot(111)
+  ax.imshow(var.gyroEr00,origin='lower')
+  plt.savefig(debug_dir+'/gyroEr00_'+str(imu)+'.pdf')
+  ax.imshow(var.gyroEz00,origin='lower')
+  plt.savefig(debug_dir+'/gyroEz00_'+str(imu)+'.pdf')
+  ax.imshow(var.gyroEr0m,origin='lower')
+  plt.savefig(debug_dir+'/gyroEr0m_'+str(imu)+'.pdf')
+  ax.imshow(var.gyroEz0m,origin='lower')
+  plt.savefig(debug_dir+'/gyroEz0m_'+str(imu)+'.pdf')
 
 def write_surf():  
   if not(os.path.isdir(debug_dir)): os.mkdir(debug_dir)

@@ -77,7 +77,6 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
     pot0,dpot=[None]*2
   pot0,dpot=comm.bcast((pot0,dpot),root=0)
 
-  #calculate E=-grad phi TODO: including gyroaverage of E
   global Er00,Ez00,Ephi00
   Er00,Ez00,Ephi00=setup.Grad(rlin,zlin,pot0,Nr,Nz)
   Er00=-Er00
@@ -89,6 +88,50 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   Er0m=-Er0m
   Ez0m=-Ez0m
   Ephi0m=-Ephi0m
+
+def gyroE(mu,qi,mi,ngyro):
+  global gyroEr00,gyroEz00,gyroEr0m,gyroEz0m #assuming Ephi=0
+  Nz,Nr=np.shape(Er00)
+  gyroEr00=np.nan*np.zeros((Nz,Nr),dtype=float)
+  gyroEz00=np.nan*np.zeros((Nz,Nr),dtype=float)
+  gyroEr0m=np.nan*np.zeros((Nz,Nr),dtype=float)
+  gyroEz0m=np.nan*np.zeros((Nz,Nr),dtype=float)
+  for iz in range(Nz):
+    for ir in range(Nr):
+      B=Bmag[iz,ir]
+      r=rlin[ir]
+      z=zlin[iz]
+      if np.isnan(B): continue
+      rho=np.sqrt(2*mi*mu/B/qi**2)
+      gyroEr00[iz,ir]=0.0
+      gyroEz00[iz,ir]=0.0
+      gyroEr0m[iz,ir]=0.0
+      gyroEz0m[iz,ir]=0.0
+      for igyro in range(ngyro):
+        angle=2*np.pi*float(igyro)/float(ngyro)
+        r1=r+rho*np.cos(angle)
+        z1=z+rho*np.sin(angle)
+        tmp=varTwoD(R,Z,Er00,r1,z1)
+        if np.isnan(tmp):
+          gyroEr00[iz,ir]=np.nan
+        else:
+          gyroEr00[iz,ir]=gyroEr00[iz,ir]+tmp/float(ngyro)
+        tmp=varTwoD(R,Z,Ez00,r1,z1)
+        if np.isnan(tmp):
+          gyroEz00[iz,ir]=np.nan
+        else:
+          gyroEz00[iz,ir]=gyroEz00[iz,ir]+tmp/float(ngyro)
+        tmp=varTwoD(R,Z,Er0m,r1,z1)
+        if np.isnan(tmp):
+          gyroEr0m[iz,ir]=np.nan
+        else:
+          gyroEr0m[iz,ir]=gyroEr0m[iz,ir]+tmp/float(ngyro)
+        tmp=varTwoD(R,Z,Ez0m,r1,z1)
+        if np.isnan(tmp):
+          gyroEz0m[iz,ir]=np.nan
+        else:
+          gyroEz0m[iz,ir]=gyroEz0m[iz,ir]+tmp/float(ngyro)
+  return
 
 def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
   global Hmin,Hmax,dH
