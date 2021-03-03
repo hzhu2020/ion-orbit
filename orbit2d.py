@@ -40,7 +40,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     output.write('%8d\n'%0)#a placeholder for debug_count
  
   for it in range(np.int(max_step)):
-    if np.isnan(r):
+    if np.isnan(r+z):
       if num_cross==1: lost=True
       break
     if math.floor(tau/dt_xgc)==step_count:
@@ -66,7 +66,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     vpc=vp+dvpdtc*dt_orb/2
     rc=r+drdtc*dt_orb/2
     zc=z+dzdtc*dt_orb/2
-    if np.isnan(rc):
+    if np.isnan(rc+zc):
       if num_cross==1: lost=True
       break
     #RK4 2nd step
@@ -76,7 +76,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     dzdte=dzdte+dzdtc/3
     rc=r+drdtc*dt_orb/2
     zc=z+dzdtc*dt_orb/2
-    if np.isnan(rc): 
+    if np.isnan(rc+zc): 
       if num_cross==1: lost=True
       break
     #RK4 3nd step
@@ -86,7 +86,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     dzdte=dzdte+dzdtc/3
     rc=r+drdtc*dt_orb
     zc=z+dzdtc*dt_orb
-    if np.isnan(rc): 
+    if np.isnan(rc+zc): 
       if num_cross==1: lost=True
       break
     #Rk4 4th step
@@ -97,7 +97,7 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     vp=vp+dvpdte*dt_orb
     r=r+drdte*dt_orb
     z=z+dzdte*dt_orb
-    if np.isnan(r): 
+    if np.isnan(r+z): 
       if num_cross==1: lost=True
       break
 
