@@ -6,6 +6,19 @@ import os
 from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss,gyro_E
 
 def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
+  global myEr00,myEz00,myEr0m,myEz0m
+  if gyro_E:
+    from parameters import nPphi,nH
+    imu=int(iorb/(nPphi*nH))
+    myEr00=var.gyroEr00[:,:,imu]
+    myEz00=var.gyroEz00[:,:,imu]
+    myEr0m=var.gyroEr0m[:,:,imu]
+    myEz0m=var.gyroEz0m[:,:,imu]
+  else:
+    myEr00=var.Er00
+    myEz00=var.Ez00
+    myEr0m=var.Er0m
+    myEz0m=var.Ez0m
   dt_orb_out=0.0
   r_beg=np.sqrt(x**2+y**2)
   z_beg=z
@@ -17,8 +30,8 @@ def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   Bmag=myinterp.TwoD(var.Bmag,r,z)
   Bphi=myinterp.TwoD(var.Bphi,r,z)
   vp=(Pphi-qi*var.psi_surf)/mi/r/Bphi*Bmag
-  H,dHdr,dHdz=var.H2d(mu,Pphi,mi,qi)
-  H0=myinterp.TwoD(H,r,z)
+  #H,dHdr,dHdz=var.H2d(mu,Pphi,mi,qi)
+  #H0=myinterp.TwoD(H,r,z)
 
   r_orb1=np.zeros((nt,),dtype=float)
   z_orb1=np.zeros((nt,),dtype=float)
@@ -167,16 +180,10 @@ def rhs(qi,mi,r,z,mu,vp):
     bphi=Bphi/Bmag
     bz=Bz/Bmag
     #E
-    if gyro_E:
-      Er00=myinterp.TwoD(var.gyroEr00,r,z)
-      Ez00=myinterp.TwoD(var.gyroEz00,r,z)
-      Er0m=myinterp.TwoD(var.gyroEr0m,r,z)
-      Ez0m=myinterp.TwoD(var.gyroEz0m,r,z)
-    else:
-      Er00=myinterp.TwoD(var.Er00,r,z)
-      Ez00=myinterp.TwoD(var.Ez00,r,z)
-      Er0m=myinterp.TwoD(var.Er0m,r,z)
-      Ez0m=myinterp.TwoD(var.Ez0m,r,z)
+    Er00=myinterp.TwoD(myEr00,r,z)
+    Ez00=myinterp.TwoD(myEz00,r,z)
+    Er0m=myinterp.TwoD(myEr0m,r,z)
+    Ez0m=myinterp.TwoD(myEz0m,r,z)
     Er=Er00+Er0m
     Ez=Ez00+Ez0m
     #gradB

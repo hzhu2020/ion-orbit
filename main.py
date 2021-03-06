@@ -39,6 +39,14 @@ if rank==0:
 else:
   r_beg,z_beg,r_end,z_end=[None]*4
 r_beg,z_beg,r_end,z_end=comm.bcast((r_beg,z_beg,r_end,z_end),root=0)
+#prepare gyro-averaged electric field
+if (gyro_E):
+  t_beg=time.time()
+  var.gyroE(comm,mu_arr,qi,mi,ngyro,MPI.SUM)
+  t_end=time.time()
+  if rank==0:
+    if debug: plots.plot_gyroE()
+    print('Gyroavering electric field took time:',t_end-t_beg,'s')
 #output arrays for integration
 if rank==0:
   dmu=mu_arr[0]*2
@@ -89,15 +97,6 @@ for iorb in range(iorb1,iorb2+1):
   Pphi=Pphi_arr[iPphi]
   x,y,z=r_beg[imu,iPphi,iH],0,z_beg[imu,iPphi,iH]
   t_beg=time.time()
-  if iorb==iorb1:
-    mu_old=mu
-    if gyro_E:
-      var.gyroE(mu,qi,mi,ngyro)
-      if debug: plots.plot_gyroE(imu)
-  else:
-    if (mu!=mu_old):
-      mu_old=mu
-      if gyro_E: var.gyroE(mu,qi,mi,ngyro)
   lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_orb,dt_xgc,nt)
   t_end=time.time()
