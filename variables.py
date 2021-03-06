@@ -123,7 +123,12 @@ def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
     B=Bmag[iz,ir]
     r=rlin[ir]
     z=zlin[iz]
-    if np.isnan(B): continue
+    if np.isnan(B):
+      gyroEr00[iz,ir,imu]=np.nan
+      gyroEz00[iz,ir,imu]=np.nan
+      gyroEr0m[iz,ir,imu]=np.nan
+      gyroEz0m[iz,ir,imu]=np.nan
+      continue
     rho=np.sqrt(2*mi*mu/B/qi**2)
     gyroEr00[iz,ir,imu]=0.0
     gyroEz00[iz,ir,imu]=0.0
