@@ -90,9 +90,11 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   Ephi0m=-Ephi0m
 
 def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
-  global gyroEr00,gyroEz00,gyroEr0m,gyroEz0m #assuming Ephi=0
+  global gyropot0,gyrodpot,gyroEr00,gyroEz00,gyroEr0m,gyroEz0m #assuming Ephi=0
   Nz,Nr=np.shape(Er00)
   Nmu=np.size(mu_arr)
+  gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
+  gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyroEr00=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyroEz00=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyroEr0m=np.zeros((Nz,Nr,Nmu),dtype=float)
@@ -116,7 +118,7 @@ def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
   itask1=int(sum(ntasks_list[0:rank]))
   itask2=itask1+myntasks-1
   for itask in range(itask1,itask2+1):
-    iz=int(itask/(Nz*Nmu))
+    iz=int(itask/(Nr*Nmu))
     ir=int((itask-iz*Nr*Nmu)/Nmu)
     imu=itask-iz*Nr*Nmu-ir*Nmu
     mu=mu_arr[imu]
@@ -124,12 +126,16 @@ def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
     r=rlin[ir]
     z=zlin[iz]
     if np.isnan(B):
+      gyropot0[iz,ir,imu]=np.nan
+      gyrodpot[iz,ir,imu]=np.nan
       gyroEr00[iz,ir,imu]=np.nan
       gyroEz00[iz,ir,imu]=np.nan
       gyroEr0m[iz,ir,imu]=np.nan
       gyroEz0m[iz,ir,imu]=np.nan
       continue
     rho=np.sqrt(2*mi*mu/B/qi**2)
+    gyropot0[iz,ir,imu]=0.0
+    gyrodpot[iz,ir,imu]=0.0
     gyroEr00[iz,ir,imu]=0.0
     gyroEz00[iz,ir,imu]=0.0
     gyroEr0m[iz,ir,imu]=0.0
@@ -138,6 +144,16 @@ def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
       angle=2*np.pi*float(igyro)/float(ngyro)
       r1=r+rho*np.cos(angle)
       z1=z+rho*np.sin(angle)
+      tmp=varTwoD(R,Z,pot0,r1,z1)
+      if np.isnan(tmp):
+        gyropot0[iz,ir,imu]=np.nan
+      else:
+        gyropot0[iz,ir,imu]=gyropot0[iz,ir,imu]+tmp/float(ngyro)
+      tmp=varTwoD(R,Z,dpot,r1,z1)
+      if np.isnan(tmp):
+        gyrodpot[iz,ir,imu]=np.nan
+      else:
+        gyrodpot[iz,ir,imu]=gyrodpot[iz,ir,imu]+tmp/float(ngyro)
       tmp=varTwoD(R,Z,Er00,r1,z1)
       if np.isnan(tmp):
         gyroEr00[iz,ir,imu]=np.nan
@@ -159,13 +175,15 @@ def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
       else:
         gyroEz0m[iz,ir,imu]=gyroEz0m[iz,ir,imu]+tmp/float(ngyro)
   #end for itask
+  gyropot0=comm.allreduce(gyropot0,op=summation)
+  gyrodpot=comm.allreduce(gyrodpot,op=summation)
   gyroEr00=comm.allreduce(gyroEr00,op=summation)
   gyroEz00=comm.allreduce(gyroEz00,op=summation)
   gyroEr0m=comm.allreduce(gyroEr0m,op=summation)
   gyroEz0m=comm.allreduce(gyroEz0m,op=summation)
   return
 
-def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
+def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,gyro_E):
   global Hmin,Hmax,dH
   nsurf=np.size(rsurf)#number of mesh points along the surface
   Bsurf=np.zeros((nsurf,),dtype=float)#magnitude of B 
@@ -174,14 +192,16 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
   for i in range(nsurf):
     r,z=rsurf[i],zsurf[i]
     Bsurf[i]=varTwoD(R,Z,Bmag,r,z)
-    dpotsurf[i]=varTwoD(R,Z,dpot,r,z)
+    if not(gyro_E):
+      dpotsurf[i]=varTwoD(R,Z,dpot,r,z)
     covbphisurf[i]=r*varTwoD(R,Z,Bphi,r,z)/Bsurf[i]
   
-  #smooth dpotsurf
-  tmp=np.fft.fft(dpotsurf)
-  freq=nsurf*np.fft.fftfreq(nsurf)
-  tmp[abs(freq)>10]=0
-  dpotsurf=np.real(np.fft.ifft(tmp))
+  if not(gyro_E):
+    #smooth dpotsurf
+    tmp=np.fft.fft(dpotsurf)
+    freq=nsurf*np.fft.fftfreq(nsurf)
+    tmp[abs(freq)>10]=0
+    dpotsurf=np.real(np.fft.ifft(tmp))
  
   Hmin=np.zeros((nmu,nPphi),dtype=float)
   Hmax=np.zeros((nmu,nPphi),dtype=float)
@@ -193,6 +213,16 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
   z_end=np.zeros((nmu,nPphi,nH),dtype=float)
   multipeak=np.zeros((nmu,nPphi),dtype=int)
   for imu in range(nmu):
+    if gyro_E:
+      dpotsurf[:]=0.0
+      for i in range(nsurf):
+        r,z=rsurf[i],zsurf[i]
+        dpotsurf[i]=varTwoD(R,Z,gyrodpot[:,:,imu]+gyropot0[:,:,imu]-pot0,r,z)
+      #smooth dpotsurf
+      tmp=np.fft.fft(dpotsurf)
+      freq=nsurf*np.fft.fftfreq(nsurf)
+      tmp[abs(freq)>10]=0
+      dpotsurf=np.real(np.fft.ifft(tmp))
     for iPphi in range(nPphi):
       Hsurf=np.zeros((nsurf,),dtype=float)
       for isurf in range(nsurf): 

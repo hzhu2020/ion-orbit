@@ -28,17 +28,6 @@ vp_max=f0_vp_max*vt
 mu_arr=np.linspace(0,mu_max,nmu)
 mu_arr[0]=mu_arr[1]/2 #to avoid zero mu
 vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
-#vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0
-if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
-  Pphi_arr=mi*var.Ra*vphi_arr+qi*var.psi_surf
-else:
-  Pphi_arr=-mi*var.Ra*vphi_arr+qi*var.psi_surf
-#H array
-if rank==0:
-  r_beg,z_beg,r_end,z_end=var.H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr)
-else:
-  r_beg,z_beg,r_end,z_end=[None]*4
-r_beg,z_beg,r_end,z_end=comm.bcast((r_beg,z_beg,r_end,z_end),root=0)
 #prepare gyro-averaged electric field
 if (gyro_E):
   t_beg=time.time()
@@ -47,6 +36,17 @@ if (gyro_E):
   if rank==0:
     if debug: plots.plot_gyroE()
     print('Gyroavering electric field took time:',t_end-t_beg,'s')
+#vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0
+if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
+  Pphi_arr=mi*var.Ra*vphi_arr+qi*var.psi_surf
+else:
+  Pphi_arr=-mi*var.Ra*vphi_arr+qi*var.psi_surf
+#H array
+if rank==0:
+  r_beg,z_beg,r_end,z_end=var.H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,gyro_E)
+else:
+  r_beg,z_beg,r_end,z_end=[None]*4
+r_beg,z_beg,r_end,z_end=comm.bcast((r_beg,z_beg,r_end,z_end),root=0)
 #output arrays for integration
 if rank==0:
   dmu=mu_arr[0]*2
