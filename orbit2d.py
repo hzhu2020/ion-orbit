@@ -3,26 +3,12 @@ import myinterp
 import numpy as np
 import math
 import os
-from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss,gyro_E
+from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
 
-def tau_orb(iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
+def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
   global myEr00,myEz00,myEr0m,myEz0m
-  myEr00=np.zeros(np.shape(var.Er00),dtype=float)
-  myEz00=np.zeros(np.shape(var.Ez00),dtype=float)
-  myEr0m=np.zeros(np.shape(var.Er0m),dtype=float)
-  myEz0m=np.zeros(np.shape(var.Ez0m),dtype=float)
+  if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(iorb)
 
-  myEr00[:,:]=var.Er00[:,:]
-  myEz00[:,:]=var.Ez00[:,:]
-  if gyro_E:
-    from parameters import nPphi,nH
-    imu=int(iorb/(nPphi*nH))
-    #To avoid the dot product between b and the ungyroaveraged E00
-    myEr0m[:,:]=var.gyroEr0m[:,:,imu]+var.gyroEr00[:,:,imu]-var.Er00[:,:]
-    myEz0m[:,:]=var.gyroEz0m[:,:,imu]+var.gyroEz00[:,:,imu]-var.Ez00[:,:]
-  else:
-    myEr0m[:,:]=var.Er0m[:,:]
-    myEz0m[:,:]=var.Ez0m[:,:]
   dt_orb_out=0.0
   r_beg=np.sqrt(x**2+y**2)
   z_beg=z

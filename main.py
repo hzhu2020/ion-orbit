@@ -31,11 +31,9 @@ vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
 #prepare gyro-averaged electric field
 if (gyro_E):
   t_beg=time.time()
-  var.gyroE(comm,mu_arr,qi,mi,ngyro,MPI.SUM)
+  var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM)
   t_end=time.time()
-  if rank==0:
-    if debug: plots.plot_gyroE()
-    print('Gyroavering electric field took time:',t_end-t_beg,'s')
+  if rank==0: print('Gyroavering electric field took time:',t_end-t_beg,'s')
 #vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0
 if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
   Pphi_arr=mi*var.Ra*vphi_arr+qi*var.psi_surf
@@ -43,7 +41,7 @@ else:
   Pphi_arr=-mi*var.Ra*vphi_arr+qi*var.psi_surf
 #H array
 if rank==0:
-  r_beg,z_beg,r_end,z_end=var.H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,gyro_E)
+  r_beg,z_beg,r_end,z_end=var.H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr)
 else:
   r_beg,z_beg,r_end,z_end=[None]*4
 r_beg,z_beg,r_end,z_end=comm.bcast((r_beg,z_beg,r_end,z_end),root=0)
@@ -97,7 +95,15 @@ for iorb in range(iorb1,iorb2+1):
   Pphi=Pphi_arr[iPphi]
   x,y,z=r_beg[imu,iPphi,iH],0,z_beg[imu,iPphi,iH]
   t_beg=time.time()
-  lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(iorb,qi,mi,x,y,z,\
+  if iorb==iorb1:
+    calc_gyroE=True
+    mu_old=mu
+  elif mu!=mu_old:
+    calc_gyroE=True
+    mu_old=mu
+  else:
+    calc_gyroE=False
+  lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_orb,dt_xgc,nt)
   t_end=time.time()
   print('rank=',rank,', orb=',iorb,', tau=',tau,', cpu time=',t_end-t_beg,'s',flush=True)

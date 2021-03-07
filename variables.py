@@ -1,5 +1,5 @@
 import numpy as np
-from parameters import interp_method
+from parameters import interp_method,gyro_E
 from scipy.interpolate import griddata,interp1d
 from scipy.signal import find_peaks
 import math
@@ -89,16 +89,12 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   Ez0m=-Ez0m
   Ephi0m=-Ephi0m
 
-def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
-  global gyropot0,gyrodpot,gyroEr00,gyroEz00,gyroEr0m,gyroEz0m #assuming Ephi=0
+def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
+  global gyropot0,gyrodpot
   Nz,Nr=np.shape(Er00)
   Nmu=np.size(mu_arr)
   gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
-  gyroEr00=np.zeros((Nz,Nr,Nmu),dtype=float)
-  gyroEz00=np.zeros((Nz,Nr,Nmu),dtype=float)
-  gyroEr0m=np.zeros((Nz,Nr,Nmu),dtype=float)
-  gyroEz0m=np.zeros((Nz,Nr,Nmu),dtype=float)
   rank=comm.Get_rank()
   size=comm.Get_size()
   #parition in (r,z,mu) just like the orbit partitioning
@@ -128,18 +124,10 @@ def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
     if np.isnan(B):
       gyropot0[iz,ir,imu]=np.nan
       gyrodpot[iz,ir,imu]=np.nan
-      gyroEr00[iz,ir,imu]=np.nan
-      gyroEz00[iz,ir,imu]=np.nan
-      gyroEr0m[iz,ir,imu]=np.nan
-      gyroEz0m[iz,ir,imu]=np.nan
       continue
     rho=np.sqrt(2*mi*mu/B/qi**2)
     gyropot0[iz,ir,imu]=0.0
     gyrodpot[iz,ir,imu]=0.0
-    gyroEr00[iz,ir,imu]=0.0
-    gyroEz00[iz,ir,imu]=0.0
-    gyroEr0m[iz,ir,imu]=0.0
-    gyroEz0m[iz,ir,imu]=0.0
     for igyro in range(ngyro):
       angle=2*np.pi*float(igyro)/float(ngyro)
       r1=r+rho*np.cos(angle)
@@ -154,36 +142,29 @@ def gyroE(comm,mu_arr,qi,mi,ngyro,summation):
         gyrodpot[iz,ir,imu]=np.nan
       else:
         gyrodpot[iz,ir,imu]=gyrodpot[iz,ir,imu]+tmp/float(ngyro)
-      tmp=varTwoD(R,Z,Er00,r1,z1)
-      if np.isnan(tmp):
-        gyroEr00[iz,ir,imu]=np.nan
-      else:
-        gyroEr00[iz,ir,imu]=gyroEr00[iz,ir,imu]+tmp/float(ngyro)
-      tmp=varTwoD(R,Z,Ez00,r1,z1)
-      if np.isnan(tmp):
-        gyroEz00[iz,ir,imu]=np.nan
-      else:
-        gyroEz00[iz,ir,imu]=gyroEz00[iz,ir,imu]+tmp/float(ngyro)
-      tmp=varTwoD(R,Z,Er0m,r1,z1)
-      if np.isnan(tmp):
-        gyroEr0m[iz,ir,imu]=np.nan
-      else:
-        gyroEr0m[iz,ir,imu]=gyroEr0m[iz,ir,imu]+tmp/float(ngyro)
-      tmp=varTwoD(R,Z,Ez0m,r1,z1)
-      if np.isnan(tmp):
-        gyroEz0m[iz,ir,imu]=np.nan
-      else:
-        gyroEz0m[iz,ir,imu]=gyroEz0m[iz,ir,imu]+tmp/float(ngyro)
   #end for itask
   gyropot0=comm.allreduce(gyropot0,op=summation)
   gyrodpot=comm.allreduce(gyrodpot,op=summation)
-  gyroEr00=comm.allreduce(gyroEr00,op=summation)
-  gyroEz00=comm.allreduce(gyroEz00,op=summation)
-  gyroEr0m=comm.allreduce(gyroEr0m,op=summation)
-  gyroEz0m=comm.allreduce(gyroEz0m,op=summation)
   return
 
-def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,gyro_E):
+def efield(iorb):
+  myEr00=Er00
+  myEz00=Ez00
+  Nr,Nz=np.shape(Er00)
+  if gyro_E:
+    from parameters import nPphi,nH
+    imu=int(iorb/(nPphi*nH))
+    #To avoid the dot product between b and the ungyroaveraged E00
+    myEr0m,myEz0m,myEphi0m=setup.Grad(rlin,zlin,gyropot0[:,:,imu]+gyrodpot[:,:,imu],Nr,Nz)
+    myEr0m=-myEr0m-Er00
+    myEz0m=-myEz0m-Ez00
+  else:
+    myEr0m=Er0m
+    myEz0m=Ez0m
+  
+  return myEr00,myEz00,myEr0m,myEz0m
+
+def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
   global Hmin,Hmax,dH
   nsurf=np.size(rsurf)#number of mesh points along the surface
   Bsurf=np.zeros((nsurf,),dtype=float)#magnitude of B 
