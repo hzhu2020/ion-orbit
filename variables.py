@@ -250,20 +250,27 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
       else:#most likely H only has one minimum and one maximum as follows
         Hmin[imu,iPphi],minloc=min(Hsurf),np.argmin(Hsurf)
         Hmax[imu,iPphi],maxloc=max(Hsurf),np.argmax(Hsurf)
-        #diH=math.floor((maxloc-minloc)/(nH+2))
+        thetamax=theta[maxloc]
+        thetamin=theta[minloc]
+        dtheta=(thetamax-thetamin)/float(nH+1)
         diH=math.floor((maxloc-minloc)/(nH+1))
         for iH in range(nH):
-          isurf=minloc+diH*(iH+1)
-          dH[imu,iPphi,iH]=0.5*(Hsurf[isurf+diH]-Hsurf[isurf-diH])
-          r_beg[imu,iPphi,iH]=rsurf[isurf]
-          z_beg[imu,iPphi,iH]=zsurf[isurf]
-          if Hsurf[isurf]<=Hsurf[0]:
-            endloc=np.argmin(abs(Hsurf[0:minloc]-Hsurf[isurf]))
+          thetam=thetamin+dtheta*float(iH+1)
+          thetal=thetam-dtheta/2.0
+          thetar=thetam+dtheta/2.0
+          r_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,thetam)
+          z_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,thetam)
+          Hm=myinterp.OneD_NL(theta,Hsurf,thetam)
+          Hr=myinterp.OneD_NL(theta,Hsurf,thetar)
+          Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
+          dH[imu,iPphi,iH]=Hr-Hl
+          if Hm<=Hsurf[0]:
+            endloc=np.argmin(abs(Hsurf[0:minloc]-Hm))
           else:
-            endloc=maxloc+np.argmin(abs(Hsurf[maxloc:]-Hsurf[isurf]))
+            endloc=maxloc+np.argmin(abs(Hsurf[maxloc:]-Hm))
 
-          if Hsurf[isurf]>=Hsurf[endloc]:
-            wH=(Hsurf[isurf]-Hsurf[endloc])/(Hsurf[endloc-1]-Hsurf[endloc])
+          if Hm>=Hsurf[endloc]:
+            wH=(Hm-Hsurf[endloc])/(Hsurf[endloc-1]-Hsurf[endloc])
             r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[endloc-1]
             z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[endloc-1]
           else:
@@ -271,7 +278,7 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
               nextloc=0
             else:
               nextloc=endloc+1
-            wH=(Hsurf[isurf]-Hsurf[endloc])/(Hsurf[nextloc]-Hsurf[endloc])
+            wH=(Hm-Hsurf[endloc])/(Hsurf[nextloc]-Hsurf[endloc])
             r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[nextloc]
             z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[nextloc]
 
