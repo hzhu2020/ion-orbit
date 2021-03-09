@@ -241,7 +241,7 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
           Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
           if(Hr>Hm)and(Hm>Hl):
             iH=iH+1   
-            dH[imu,iPphi,iH]=0.5*(Hr-Hl)
+            dH[imu,iPphi,iH]=Hr-Hl
             r_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,thetam)
             z_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,thetam)
             r_end[imu,iPphi,iH]=-1e9
