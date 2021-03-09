@@ -219,27 +219,34 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
       pks2,_=find_peaks(-Hsurf)
       if (np.size(pks1)>1)or(np.size(pks2)>1):#rare cases when H has multiple peaks&troughs 
         multipeak[imu,iPphi]=1
-        nsurf_tmp=0
+        theta_total=0.0
         #first, determine number of nodes where \partial H/\partial\theta>0 
         for isurf in range(nsurf):
           inext=(isurf+1)%nsurf
           iprev=(isurf-1)%nsurf
-          if(Hsurf[inext]>Hsurf[isurf])and(Hsurf[isurf]>Hsurf[iprev]): nsurf_tmp=nsurf_tmp+1
-         
-        diH=math.floor(nsurf_tmp/(nH+1))
-        iH=-1
-        isurf=0
-        while (isurf<nsurf)and(iH<nH-1):
-          inext=(isurf+diH)%nsurf
-          iprev=(isurf-diH)%nsurf
           if(Hsurf[inext]>Hsurf[isurf])and(Hsurf[isurf]>Hsurf[iprev]):
+            thetar=theta[inext]
+            thetal=theta[iprev]
+            if thetar<thetal: thetar=thetar+2*np.pi
+            theta_total=theta_total+(thetar-thetal)/2.0
+         
+        dtheta=theta_total/float(nH+1)
+        iH=-1
+        thetam=theta[0]
+        while (thetam<theta[nsurf-1])and(iH<nH-1):
+          thetal=thetam-dtheta/2.0
+          thetar=thetam+dtheta/2.0
+          Hm=myinterp.OneD_NL(theta,Hsurf,thetam)
+          Hr=myinterp.OneD_NL(theta,Hsurf,thetar)
+          Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
+          if(Hr>Hm)and(Hm>Hl):
             iH=iH+1   
-            dH[imu,iPphi,iH]=0.5*(Hsurf[inext]-Hsurf[iprev])
-            r_beg[imu,iPphi,iH]=rsurf[isurf]
-            z_beg[imu,iPphi,iH]=zsurf[isurf]
+            dH[imu,iPphi,iH]=0.5*(Hr-Hl)
+            r_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,thetam)
+            z_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,thetam)
             r_end[imu,iPphi,iH]=-1e9
             z_end[imu,iPphi,iH]=-1e9
-          isurf=isurf+diH
+          thetam=thetam+dtheta
         while (iH<nH-1): 
           iH=iH+1
           dH[imu,iPphi,iH]=0 
@@ -253,7 +260,6 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
         thetamax=theta[maxloc]
         thetamin=theta[minloc]
         dtheta=(thetamax-thetamin)/float(nH+1)
-        diH=math.floor((maxloc-minloc)/(nH+1))
         for iH in range(nH):
           thetam=thetamin+dtheta*float(iH+1)
           thetal=thetam-dtheta/2.0
