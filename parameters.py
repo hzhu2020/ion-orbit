@@ -1,17 +1,19 @@
+#write to bp file using adios2
+bp_write=True
 #identify loss orbits
 determine_loss=False
 #gyroaverage the electric field
-gyro_E=True
+gyro_E=False
 ngyro=8
 #All paramers are in mks unit except Ti
 qi=1.60217662E-19#ion charge
 mi=2*1.67262192369E-27#ion mass
 Ti=800#ion temperature in eV
 #f0_vp/smu_max could be the same as in the XGC input, but not's not required
-f0_vp_max=4.0 #maximum v_\para normalized by vt
-f0_smu_max=4.0 #maximum v_\perp normliaed by vt
+f0_vp_max=4.5 #maximum v_\para normalized by vt
+f0_smu_max=4.5 #maximum v_\perp normliaed by vt
 pot0fac=1. #factor that reduces 00 E field
-dpotfac=1. #factor that reduces turb E field
+dpotfac=0. #factor that reduces turb E field
 #input directory containing adios bp files
 input_dir='input_dir'
 adios_version=2
@@ -24,11 +26,11 @@ Nz=500
 interp_method='cubic'
 #number of elements in mu, Pphi, H, and t
 nmu=2
-nPphi=2
-nH=2
-nt=100
-dt_orb=5E-8 #time step size for the orbit integration
-max_step=2E4 #max number of time steps for orbit integration
+nPphi=3
+nH=4
+nt=10
+dt_orb=3.9515E-7 #time step size for the orbit integration
+max_step=1E4 #max number of time steps for orbit integration
 dt_xgc=3.9515E-7 #simulation time step size of XGC
 #parameters for finding the surface
 surf_psin=0.384 #normalized psi, psin=1 for the LCFS
@@ -39,5 +41,5 @@ cross_psitol=0.0025 #percentage
 cross_rztol=0.005 #meter
 cross_disttol=0.005 #percentage
 #for debug
-debug=True
+debug=False
 debug_dir='debug_dir'
