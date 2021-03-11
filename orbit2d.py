@@ -3,12 +3,13 @@ import myinterp
 import numpy as np
 import math
 import os
-from parameters import max_step,cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
+from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
 
-def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
+def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max_step):
   global myEr00,myEz00,myEr0m,myEz0m
   if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(iorb)
-
+  
+  dt_orb=dt_xgc/float(nsteps)
   dt_orb_out=0.0
   r_beg=np.sqrt(x**2+y**2)
   z_beg=z
@@ -46,7 +47,7 @@ def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
     if np.isnan(r+z):
       if num_cross==1: lost=True
       break
-    if math.floor(tau/dt_xgc)==step_count:
+    if it==nsteps*step_count:
       if (step_count<nt)and(num_cross==0):
         r_orb1[step_count]=r
         z_orb1[step_count]=z
@@ -54,7 +55,7 @@ def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_orb,dt_xgc,nt):
 
       if num_cross==0: step_count=step_count+1
 
-    if(debug)and(it%math.floor(dt_xgc/dt_orb)==0):
+    if(debug)and(it%nsteps==0):
       debug_count=debug_count+1
       output.write('%19.10E %19.10E\n'%(r,z))
       

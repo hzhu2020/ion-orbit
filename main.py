@@ -3,7 +3,7 @@ import math
 import setup
 import myinterp
 from parameters import bp_write,qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
-                       Nr,Nz,nmu,nPphi,nH,nt,dt_orb,dt_xgc,debug,determine_loss,gyro_E
+                       Nr,Nz,nmu,nPphi,nH,nt,dt_xgc,nsteps,max_step,debug,determine_loss,gyro_E
 if gyro_E: from parameters import ngyro
 import variables as var
 from mpi4py import MPI
@@ -104,7 +104,7 @@ for iorb in range(iorb1,iorb2+1):
   else:
     calc_gyroE=False
   lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,\
-      r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_orb,dt_xgc,nt)
+      r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
   t_end=time.time()
   print('rank=',rank,', orb=',iorb,', tau=',tau,', cpu time=',t_end-t_beg,'s',flush=True)
   r_orb[iorb-iorb1,:]=r_orb1
@@ -222,56 +222,56 @@ elif (rank==0)and(bp_write):
   output=adios2.open('orbit.bp','w')
   #nmu
   value=np.array(nmu)
-  start=np.zeros((value.ndim),dtype=np.int) 
-  count=np.array((value.shape),dtype=np.int) 
+  start=np.zeros((value.ndim),dtype=int) 
+  count=np.array((value.shape),dtype=int) 
   shape=count
   output.write('nmu',value,shape,start,count)
   #nPphi
   value=np.array(nPphi)
-  start=np.zeros((value.ndim),dtype=np.int) 
-  count=np.array((value.shape),dtype=np.int) 
+  start=np.zeros((value.ndim),dtype=int) 
+  count=np.array((value.shape),dtype=int) 
   shape=count
   output.write('nPphi',value,shape,start,count)
   #nH
   value=np.array(nH)
-  start=np.zeros((value.ndim),dtype=np.int) 
-  count=np.array((value.shape),dtype=np.int) 
+  start=np.zeros((value.ndim),dtype=int) 
+  count=np.array((value.shape),dtype=int) 
   shape=count
   output.write('nH',value,shape,start,count)
   #nt
   value=np.array(nt)
-  start=np.zeros((value.ndim),dtype=np.int) 
-  count=np.array((value.shape),dtype=np.int) 
+  start=np.zeros((value.ndim),dtype=int) 
+  count=np.array((value.shape),dtype=int) 
   shape=count
   output.write('nt',value,shape,start,count)
   #steps_orb
-  start=np.zeros((steps_output.ndim),dtype=np.int) 
-  count=np.array((steps_output.shape),dtype=np.int) 
+  start=np.zeros((steps_output.ndim),dtype=int) 
+  count=np.array((steps_output.shape),dtype=int) 
   shape=count
   output.write('steps_orb',steps_output,shape,start,count)
   #dt_orb
-  start=np.zeros((dt_orb_output.ndim),dtype=np.int) 
-  count=np.array((dt_orb_output.shape),dtype=np.int) 
+  start=np.zeros((dt_orb_output.ndim),dtype=int) 
+  count=np.array((dt_orb_output.shape),dtype=int) 
   shape=count
   output.write('dt_orb',dt_orb_output,shape,start,count)
   #mu_orb
-  start=np.zeros((mu_arr.ndim),dtype=np.int) 
-  count=np.array((mu_arr.shape),dtype=np.int) 
+  start=np.zeros((mu_arr.ndim),dtype=int) 
+  count=np.array((mu_arr.shape),dtype=int) 
   shape=count
   output.write('mu_orb',mu_arr,shape,start,count)
   #R_orb
-  start=np.zeros((r_output.ndim),dtype=np.int) 
-  count=np.array((r_output.shape),dtype=np.int) 
+  start=np.zeros((r_output.ndim),dtype=int) 
+  count=np.array((r_output.shape),dtype=int) 
   shape=count
   output.write('R_orb',r_output,shape,start,count)
   #Z_orb
-  start=np.zeros((z_output.ndim),dtype=np.int) 
-  count=np.array((z_output.shape),dtype=np.int) 
+  start=np.zeros((z_output.ndim),dtype=int) 
+  count=np.array((z_output.shape),dtype=int) 
   shape=count
   output.write('Z_orb',z_output,shape,start,count)
   #vp_orb
-  start=np.zeros((vp_output.ndim),dtype=np.int) 
-  count=np.array((vp_output.shape),dtype=np.int) 
+  start=np.zeros((vp_output.ndim),dtype=int) 
+  count=np.array((vp_output.shape),dtype=int) 
   shape=count
   output.write('vp_orb',vp_output,shape,start,count)
   output.close()
