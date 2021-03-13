@@ -115,33 +115,18 @@ for iorb in range(iorb1,iorb2+1):
   if (lost)and(determine_loss): loss_orb[iorb-iorb1]=1
   if debug: tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
-#rank=0 gather data and output
-if rank==0:
-  count1=norb_list
-  count2=count1*nt
-  steps_output=np.zeros((norb,),dtype=int)
-  dt_orb_output=np.zeros((norb,),dtype=float)
-  if determine_loss: loss_output=np.zeros((norb,),dtype=int)
-  if debug: tau_output=np.zeros((norb,),dtype=float)
-  r_output=np.zeros((norb,nt),dtype=float,order='C')
-  z_output=np.zeros((norb,nt),dtype=float,order='C')
-  vp_output=np.zeros((norb,nt),dtype=float,order='C')
-else:
-  if determine_loss: loss_output=None
-  if debug: tau_output=None
-  steps_output,dt_orb_output,r_output,z_output,vp_output,count1,count2=[None]*7
 comm.barrier()
 print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min')
-comm.Gatherv(steps_orb,(steps_output,count1),root=0)
-comm.Gatherv(dt_orb_out_orb,(dt_orb_output,count1),root=0)
-if determine_loss: comm.Gatherv(loss_orb,(loss_output,count1),root=0)
-if debug: comm.Gatherv(tau_orb,(tau_output,count1),root=0)
-comm.Gatherv(r_orb,(r_output,count2),root=0)
-comm.Gatherv(z_orb,(z_output,count2),root=0)
-comm.Gatherv(vp_orb,(vp_output,count2),root=0)
-if rank==0:
-  #output which orbits are lost
-  if determine_loss:
+#output which orbits are lost
+if determine_loss:
+  if rank==0:
+    count1=norb_list
+    loss_output=np.zeros((norb,),dtype=int)
+  else:
+    count1=None
+    loss_output=None
+  comm.Gatherv(loss_orb,(loss_output,count1),root=0)
+  if rank==0:
     output=open('lost.txt','w')
     output.write('%8d%8d%8d\n'% (nmu,nPphi,nH))
     for iorb in range(norb):
@@ -149,8 +134,16 @@ if rank==0:
       output.write('%1d\n'%value)
     output.write('%8d\n'%-1)
     output.close()
-  #output tau separately for debug
-  if debug:
+#output tau separately for debug
+if debug: 
+  if rank==0:
+    count1=norb_list
+    tau_output=np.zeros((norb,),dtype=float)
+  else:
+    tau_output=None
+    count1=None
+  comm.Gatherv(tau_orb,(tau_output,count1),root=0)
+  if rank==0:
     output=open('tau.txt','w')
     count=0
     for iorb in range(norb):
@@ -160,6 +153,35 @@ if rank==0:
       if count%4==0: output.write('\n')
 
 #the following are for xgc to read
+adios2_mpi=False
+if bp_write:
+  import adios2
+  #Test if adios2 supports MPI. There should be a better way.
+  try:
+    output=adios2.open('orbit.bp','w',comm)
+    adios2_mpi=True
+  except:
+    if rank==0: print('Adios2 does not support MPI.')
+    adios2_mpi=False
+
+if (not bp_write)or(not adios2_mpi):
+  #rank=0 gather data and output
+  if rank==0:
+    count1=norb_list
+    count2=count1*nt
+    steps_output=np.zeros((norb,),dtype=int)
+    dt_orb_output=np.zeros((norb,),dtype=float)
+    r_output=np.zeros((norb,nt),dtype=float,order='C')
+    z_output=np.zeros((norb,nt),dtype=float,order='C')
+    vp_output=np.zeros((norb,nt),dtype=float,order='C')
+  else:
+    steps_output,dt_orb_output,r_output,z_output,vp_output,count1,count2=[None]*7
+  comm.Gatherv(steps_orb,(steps_output,count1),root=0)
+  comm.Gatherv(dt_orb_out_orb,(dt_orb_output,count1),root=0)
+  comm.Gatherv(r_orb,(r_output,count2),root=0)
+  comm.Gatherv(z_orb,(z_output,count2),root=0)
+  comm.Gatherv(vp_orb,(vp_output,count2),root=0)
+
 if (rank==0)and(not bp_write):
   output=open('orbit.txt','w')
   output.write('%8d%8d%8d%8d\n'% (nmu,nPphi,nH,nt))
@@ -217,63 +239,66 @@ if (rank==0)and(not bp_write):
   #end flag
   output.write('%8d\n'%-1)
   output.close()
-elif (rank==0)and(bp_write):
-  import adios2
+elif (rank==0)and(bp_write)and(not adios2_mpi):
   output=adios2.open('orbit.bp','w')
-  #nmu
+  #nmu, nPphi, nH, nt
   value=np.array(nmu)
   start=np.zeros((value.ndim),dtype=int) 
   count=np.array((value.shape),dtype=int) 
   shape=count
   output.write('nmu',value,shape,start,count)
-  #nPphi
   value=np.array(nPphi)
-  start=np.zeros((value.ndim),dtype=int) 
-  count=np.array((value.shape),dtype=int) 
-  shape=count
   output.write('nPphi',value,shape,start,count)
-  #nH
   value=np.array(nH)
-  start=np.zeros((value.ndim),dtype=int) 
-  count=np.array((value.shape),dtype=int) 
-  shape=count
   output.write('nH',value,shape,start,count)
-  #nt
   value=np.array(nt)
-  start=np.zeros((value.ndim),dtype=int) 
-  count=np.array((value.shape),dtype=int) 
-  shape=count
   output.write('nt',value,shape,start,count)
-  #steps_orb
+  #steps_orb, dt_orb
   start=np.zeros((steps_output.ndim),dtype=int) 
   count=np.array((steps_output.shape),dtype=int) 
   shape=count
   output.write('steps_orb',steps_output,shape,start,count)
-  #dt_orb
-  start=np.zeros((dt_orb_output.ndim),dtype=int) 
-  count=np.array((dt_orb_output.shape),dtype=int) 
-  shape=count
   output.write('dt_orb',dt_orb_output,shape,start,count)
   #mu_orb
   start=np.zeros((mu_arr.ndim),dtype=int) 
   count=np.array((mu_arr.shape),dtype=int) 
   shape=count
   output.write('mu_orb',mu_arr,shape,start,count)
-  #R_orb
+  #R_orb, Z_orb, vp_orb
   start=np.zeros((r_output.ndim),dtype=int) 
-  count=np.array((r_output.shape),dtype=int) 
+  count=np.array((r_output.shape),dtype=int)
   shape=count
   output.write('R_orb',r_output,shape,start,count)
-  #Z_orb
-  start=np.zeros((z_output.ndim),dtype=int) 
-  count=np.array((z_output.shape),dtype=int) 
-  shape=count
   output.write('Z_orb',z_output,shape,start,count)
-  #vp_orb
-  start=np.zeros((vp_output.ndim),dtype=int) 
-  count=np.array((vp_output.shape),dtype=int) 
-  shape=count
   output.write('vp_orb',vp_output,shape,start,count)
   output.close()
-#end if rank==0 output
+elif (bp_write)and(adios2_mpi):
+  if rank==0:
+    value=np.array(nmu)
+    start=np.zeros((value.ndim),dtype=int) 
+    count=np.array((value.shape),dtype=int) 
+    shape=count
+    output.write('nmu',np.array(nmu),shape,start,count)
+    output.write('nPphi',np.array(nPphi),shape,start,count)
+    output.write('nH',np.array(nH),shape,start,count)
+    output.write('nt',np.array(nt),shape,start,count)
+    start=np.zeros((mu_arr.ndim),dtype=int) 
+    count=np.array((mu_arr.shape),dtype=int) 
+    shape=count
+    output.write('mu_orb',mu_arr,shape,start,count)
+
+  norb=nmu*nPphi*nH
+  shape=np.array([norb,],dtype=int)
+  start=np.array([iorb1,],dtype=int) 
+  count=np.array([iorb2-iorb1+1,],dtype=int)
+  output.write('steps_orb',steps_orb,shape,start,count)
+  output.write('dt_orb',dt_orb_out_orb,shape,start,count)
+  shape=np.array([norb,nt],dtype=int)
+  start=np.array([iorb1,0],dtype=int) 
+  count=np.array([iorb2-iorb1+1,nt],dtype=int)
+  output.write('R_orb',r_orb,shape,start,count)
+  output.write('Z_orb',z_orb,shape,start,count)
+  output.write('vp_orb',vp_orb,shape,start,count)
+  output.close()
+#end of output
 comm.barrier()
