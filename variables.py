@@ -1,5 +1,5 @@
 import numpy as np
-from parameters import interp_method,gyro_E
+from parameters import interp_method,gyro_E,dpot_fourier_maxm
 from scipy.interpolate import griddata,interp1d
 from scipy.signal import find_peaks
 import math
@@ -181,7 +181,7 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
     #smooth dpotsurf
     tmp=np.fft.fft(dpotsurf)
     freq=nsurf*np.fft.fftfreq(nsurf)
-    tmp[abs(freq)>10]=0
+    tmp[abs(freq)>dpot_fourier_maxm]=0
     dpotsurf=np.real(np.fft.ifft(tmp))
  
   #partition tasks
@@ -219,7 +219,7 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
       #smooth dpotsurf
       tmp=np.fft.fft(dpotsurf)
       freq=nsurf*np.fft.fftfreq(nsurf)
-      tmp[abs(freq)>10]=0
+      tmp[abs(freq)>dpot_fourier_maxm]=0
       dpotsurf=np.real(np.fft.ifft(tmp))
     #end if gyroE
     Hsurf=np.zeros((nsurf,),dtype=float)

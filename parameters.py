@@ -14,6 +14,7 @@ f0_vp_max=5. #maximum v_\para normalized by vt
 f0_smu_max=5. #maximum v_\perp normliaed by vt
 pot0fac=1. #factor that reduces 00 E field
 dpotfac=1. #factor that reduces turb E field
+dpot_fourier_maxm=10 #maximum poloidal Fourier mode number for dpot
 #input directory containing adios bp files
 input_dir='input_dir'
 adios_version=2
