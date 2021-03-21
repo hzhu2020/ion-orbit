@@ -40,11 +40,7 @@ if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
 else:
   Pphi_arr=-mi*var.Ra*vphi_arr+qi*var.psi_surf
 #H array
-if rank==0:
-  r_beg,z_beg,r_end,z_end=var.H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr)
-else:
-  r_beg,z_beg,r_end,z_end=[None]*4
-r_beg,z_beg,r_end,z_end=comm.bcast((r_beg,z_beg,r_end,z_end),root=0)
+r_beg,z_beg,r_end,z_end=var.H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,MPI.SUM)
 #output arrays for integration
 if rank==0:
   dmu=mu_arr[0]*2

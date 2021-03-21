@@ -164,8 +164,8 @@ def efield(iorb):
   
   return myEr00,myEz00,myEr0m,myEz0m
 
-def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
-  global Hmin,Hmax,dH
+def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
+  global dH
   nsurf=np.size(rsurf)#number of mesh points along the surface
   Bsurf=np.zeros((nsurf,),dtype=float)#magnitude of B 
   dpotsurf=np.zeros((nsurf,),dtype=float)#m/=0 potential along the surface
@@ -184,16 +184,33 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
     tmp[abs(freq)>10]=0
     dpotsurf=np.real(np.fft.ifft(tmp))
  
-  Hmin=np.zeros((nmu,nPphi),dtype=float)
-  Hmax=np.zeros((nmu,nPphi),dtype=float)
+  #partition tasks
+  rank=comm.Get_rank()
+  size=comm.Get_size()
+  if rank==0:
+    ntasks=nmu*nPphi
+    ntasks_avg=int(ntasks/size)
+    ntasks_last=ntasks-ntasks_avg*(size-1)
+    ntasks_list=np.zeros((size,1),dtype=int)
+    ntasks_list[:]=ntasks_avg
+    if ntasks_last>ntasks_avg:
+      for irank in range(ntasks_last-ntasks_avg): ntasks_list[irank]=ntasks_list[irank]+1
+  else:
+    ntasks_list=None
+  ntasks_list=comm.bcast(ntasks_list,root=0)
+  myntasks=int(ntasks_list[rank])
+  itask1=int(sum(ntasks_list[0:rank]))
+  itask2=itask1+myntasks-1
+
   dH=np.zeros((nmu,nPphi,nH),dtype=float)
   #crossing locations of the orbits with the LCFS
   r_beg=np.zeros((nmu,nPphi,nH),dtype=float)
   z_beg=np.zeros((nmu,nPphi,nH),dtype=float)
   r_end=np.zeros((nmu,nPphi,nH),dtype=float)
   z_end=np.zeros((nmu,nPphi,nH),dtype=float)
-  multipeak=np.zeros((nmu,nPphi),dtype=int)
-  for imu in range(nmu):
+  for itask in range(itask1,itask2+1):
+    imu=int(itask/(nPphi))
+    iPphi=itask-imu*nPphi
     if gyro_E:
       dpotsurf[:]=0.0
       for i in range(nsurf):
@@ -204,90 +221,95 @@ def H_arr(qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr):
       freq=nsurf*np.fft.fftfreq(nsurf)
       tmp[abs(freq)>10]=0
       dpotsurf=np.real(np.fft.ifft(tmp))
-    for iPphi in range(nPphi):
-      Hsurf=np.zeros((nsurf,),dtype=float)
-      for isurf in range(nsurf): 
-        #The zonal potential is not needed for H.
-        Hsurf[isurf]=(Pphi_arr[iPphi]-qi*psi_surf)**2/covbphisurf[isurf]**2/2/mi\
-                     +mu_arr[imu]*Bsurf[isurf]+qi*dpotsurf[isurf]
+    #end if gyroE
+    Hsurf=np.zeros((nsurf,),dtype=float)
+    for isurf in range(nsurf): 
+      #The zonal potential is not needed for H.
+      Hsurf[isurf]=(Pphi_arr[iPphi]-qi*psi_surf)**2/covbphisurf[isurf]**2/2/mi\
+                   +mu_arr[imu]*Bsurf[isurf]+qi*dpotsurf[isurf]
 
-      #invert the sign of H if Bphi>0, so the entrance is always at \partial H/partial\theta>0
-      Nz,Nr=np.array(np.shape(Bphi))
-      if Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0: Hsurf=-Hsurf
+    #invert the sign of H if Bphi>0, so the entrance is always at \partial H/partial\theta>0
+    Nz,Nr=np.array(np.shape(Bphi))
+    if Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0: Hsurf=-Hsurf
 
-      pks1,_=find_peaks(Hsurf)
-      pks2,_=find_peaks(-Hsurf)
-      if (np.size(pks1)>1)or(np.size(pks2)>1):#rare cases when H has multiple peaks&troughs 
-        multipeak[imu,iPphi]=1
-        theta_total=0.0
-        #first, determine number of nodes where \partial H/\partial\theta>0 
-        for isurf in range(nsurf):
-          inext=(isurf+1)%nsurf
-          iprev=(isurf-1)%nsurf
-          if(Hsurf[inext]>Hsurf[isurf])and(Hsurf[isurf]>Hsurf[iprev]):
-            thetar=theta[inext]
-            thetal=theta[iprev]
-            if thetar<thetal: thetar=thetar+2*np.pi
-            theta_total=theta_total+(thetar-thetal)/2.0
+    pks1,_=find_peaks(Hsurf)
+    pks2,_=find_peaks(-Hsurf)
+    if (np.size(pks1)>1)or(np.size(pks2)>1):#rare cases when H has multiple peaks&troughs 
+      theta_total=0.0
+      #first, determine number of nodes where \partial H/\partial\theta>0 
+      for isurf in range(nsurf):
+        inext=(isurf+1)%nsurf
+        iprev=(isurf-1)%nsurf
+        if(Hsurf[inext]>Hsurf[isurf])and(Hsurf[isurf]>Hsurf[iprev]):
+          thetar=theta[inext]
+          thetal=theta[iprev]
+          if thetar<thetal: thetar=thetar+2*np.pi
+          theta_total=theta_total+(thetar-thetal)/2.0
          
-        dtheta=theta_total/float(nH+1)
-        iH=-1
-        thetam=theta[0]
-        while (thetam<theta[nsurf-1])and(iH<nH-1):
-          thetal=thetam-dtheta/2.0
-          thetar=thetam+dtheta/2.0
-          Hm=myinterp.OneD_NL(theta,Hsurf,thetam)
-          Hr=myinterp.OneD_NL(theta,Hsurf,thetar)
-          Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
-          if(Hr>Hm)and(Hm>Hl):
-            iH=iH+1   
-            dH[imu,iPphi,iH]=Hr-Hl
-            r_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,thetam)
-            z_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,thetam)
-            r_end[imu,iPphi,iH]=-1e9
-            z_end[imu,iPphi,iH]=-1e9
-          thetam=thetam+dtheta
-        while (iH<nH-1): 
-          iH=iH+1
-          dH[imu,iPphi,iH]=0 
-          r_beg[imu,iPphi,iH]=rsurf[0]
-          z_beg[imu,iPphi,iH]=zsurf[0]
-          r_end[imu,iPphi,iH]=rsurf[0]
-          z_end[imu,iPphi,iH]=zsurf[0]
-      else:#most likely H only has one minimum and one maximum as follows
-        Hmin[imu,iPphi],minloc=min(Hsurf),np.argmin(Hsurf)
-        Hmax[imu,iPphi],maxloc=max(Hsurf),np.argmax(Hsurf)
-        thetamax=theta[maxloc]
-        thetamin=theta[minloc]
-        dtheta=(thetamax-thetamin)/float(nH+1)
-        for iH in range(nH):
-          thetam=thetamin+dtheta*float(iH+1)
-          thetal=thetam-dtheta/2.0
-          thetar=thetam+dtheta/2.0
+      dtheta=theta_total/float(nH+1)
+      iH=-1
+      thetam=theta[0]
+      while (thetam<theta[nsurf-1])and(iH<nH-1):
+        thetal=thetam-dtheta/2.0
+        thetar=thetam+dtheta/2.0
+        Hm=myinterp.OneD_NL(theta,Hsurf,thetam)
+        Hr=myinterp.OneD_NL(theta,Hsurf,thetar)
+        Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
+        if(Hr>Hm)and(Hm>Hl):
+          iH=iH+1   
+          dH[imu,iPphi,iH]=Hr-Hl
           r_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,thetam)
           z_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,thetam)
-          Hm=myinterp.OneD_NL(theta,Hsurf,thetam)
-          Hr=myinterp.OneD_NL(theta,Hsurf,thetar)
-          Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
-          dH[imu,iPphi,iH]=Hr-Hl
-          if Hm<=Hsurf[0]:
-            endloc=np.argmin(abs(Hsurf[0:minloc]-Hm))
-          else:
-            endloc=maxloc+np.argmin(abs(Hsurf[maxloc:]-Hm))
+          r_end[imu,iPphi,iH]=-1e9
+          z_end[imu,iPphi,iH]=-1e9
+        thetam=thetam+dtheta
+      while (iH<nH-1): 
+        iH=iH+1
+        dH[imu,iPphi,iH]=0 
+        r_beg[imu,iPphi,iH]=rsurf[0]
+        z_beg[imu,iPphi,iH]=zsurf[0]
+        r_end[imu,iPphi,iH]=rsurf[0]
+        z_end[imu,iPphi,iH]=zsurf[0]
+    else:#most likely H only has one minimum and one maximum as follows
+      Hmin,minloc=min(Hsurf),np.argmin(Hsurf)
+      Hmax,maxloc=max(Hsurf),np.argmax(Hsurf)
+      thetamax=theta[maxloc]
+      thetamin=theta[minloc]
+      dtheta=(thetamax-thetamin)/float(nH+1)
+      for iH in range(nH):
+        thetam=thetamin+dtheta*float(iH+1)
+        thetal=thetam-dtheta/2.0
+        thetar=thetam+dtheta/2.0
+        r_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,thetam)
+        z_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,thetam)
+        Hm=myinterp.OneD_NL(theta,Hsurf,thetam)
+        Hr=myinterp.OneD_NL(theta,Hsurf,thetar)
+        Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
+        dH[imu,iPphi,iH]=Hr-Hl
+        if Hm<=Hsurf[0]:
+          endloc=np.argmin(abs(Hsurf[0:minloc]-Hm))
+        else:
+          endloc=maxloc+np.argmin(abs(Hsurf[maxloc:]-Hm))
 
-          if Hm>=Hsurf[endloc]:
-            wH=(Hm-Hsurf[endloc])/(Hsurf[endloc-1]-Hsurf[endloc])
-            r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[endloc-1]
-            z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[endloc-1]
+        if Hm>=Hsurf[endloc]:
+          wH=(Hm-Hsurf[endloc])/(Hsurf[endloc-1]-Hsurf[endloc])
+          r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[endloc-1]
+          z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[endloc-1]
+        else:
+          if endloc==nsurf-1:
+            nextloc=0
           else:
-            if endloc==nsurf-1:
-              nextloc=0
-            else:
-              nextloc=endloc+1
-            wH=(Hm-Hsurf[endloc])/(Hsurf[nextloc]-Hsurf[endloc])
-            r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[nextloc]
-            z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[nextloc]
-
+            nextloc=endloc+1
+          wH=(Hm-Hsurf[endloc])/(Hsurf[nextloc]-Hsurf[endloc])
+          r_end[imu,iPphi,iH]=(1-wH)*rsurf[endloc]+wH*rsurf[nextloc]
+          z_end[imu,iPphi,iH]=(1-wH)*zsurf[endloc]+wH*zsurf[nextloc]
+    #end if multipeaks
+  #end for itask
+  dH=comm.allreduce(dH,op=summation)
+  r_beg=comm.allreduce(r_beg,op=summation)
+  z_beg=comm.allreduce(z_beg,op=summation)
+  r_end=comm.allreduce(r_end,op=summation)
+  z_end=comm.allreduce(z_end,op=summation)
   return r_beg,z_beg,r_end,z_end
 
 def H2d(mu,Pphi,mi,qi):
