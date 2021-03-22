@@ -5,7 +5,7 @@ if adios_version==1:
 elif adios_version==2:
   import adios2 as ad
 else:
-  print('Wrong adios version.')
+  print('Wrong adios version.',flush=True)
   exit()
 
 import numpy as np
@@ -116,7 +116,7 @@ def Bfield(rz,rlin,zlin):
 
 def Pot(rz,rlin,zlin):
   if adios_version==1:
-    print('Not added yet.')
+    print('Not added yet.',flush=True)
   elif adios_version==2:
     fname=input_dir+'/'+pot_file
     f=ad.open(fname,'r')

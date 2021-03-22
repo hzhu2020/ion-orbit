@@ -33,7 +33,7 @@ if (gyro_E):
   t_beg=time.time()
   var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM)
   t_end=time.time()
-  if rank==0: print('Gyroavering electric field took time:',t_end-t_beg,'s')
+  if rank==0: print('Gyroavering electric field took time:',t_end-t_beg,'s',flush=True)
 #vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0
 if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
   Pphi_arr=mi*var.Ra*vphi_arr+qi*var.psi_surf
@@ -112,7 +112,7 @@ for iorb in range(iorb1,iorb2+1):
   if debug: tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
 comm.barrier()
-print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min')
+print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
 #output which orbits are lost
 if determine_loss:
   if rank==0:
@@ -157,7 +157,7 @@ if bp_write:
     output=adios2.open('orbit.bp','w',comm)
     adios2_mpi=True
   except:
-    if rank==0: print('Adios2 does not support MPI.')
+    if rank==0: print('Adios2 does not support MPI.',flush=True)
     adios2_mpi=False
 
 if (not bp_write)or(not adios2_mpi):

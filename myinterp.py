@@ -43,7 +43,7 @@ def OneD_NL(x1d,f1d,xin):
 
 def TwoD(f2d,xin,yin):
   if xin==np.nan:
-    print(xin,yin,dx,dy)
+    print(xin,yin,dx,dy,flush=True)
   ix=math.floor((xin-x0)/dx)
   wx=(xin-x0)/dx-ix
   iy=math.floor((yin-y0)/dy)
