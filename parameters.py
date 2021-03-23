@@ -26,6 +26,7 @@ Nz=1000
 #options: 'linear', 'nearest', 'cubic'
 interp_method='cubic'
 #number of elements in mu, Pphi, H, and t
+partition_opt=True#optimize orbit partition to reduce load imbalance, need input_dir/tau.txt
 nmu=60
 nPphi=60
 nH=120

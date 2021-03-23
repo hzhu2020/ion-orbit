@@ -2,7 +2,7 @@ import numpy as np
 import math
 import setup
 import myinterp
-from parameters import bp_write,qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
+from parameters import partition_opt,bp_write,qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
                        Nr,Nz,nmu,nPphi,nH,nt,dt_xgc,nsteps,max_step,debug,determine_loss,gyro_E
 if gyro_E: from parameters import ngyro
 import variables as var
@@ -59,21 +59,104 @@ if rank==0:
   output.write('%8d\n'%-1)
   output.close()
 #partition orbits among processes
-if rank==0:
-  norb=nmu*nPphi*nH
-  norb_avg=int(norb/size)
-  norb_last=norb-norb_avg*(size-1)
-  norb_list=np.zeros((size,1),dtype=int)
-  norb_list[:]=norb_avg
-  if norb_last>norb_avg:
-    for irank in range(norb_last-norb_avg): norb_list[irank]=norb_list[irank]+1
-else:
-  norb_list=None
+if (partition_opt):#partition orbits based on the orbit length
+  if rank==0:
+    #read from file
+    from parameters import input_dir
+    fid=open(input_dir+'/tau.txt','r')
+    nmu_tau=int(fid.readline(8))
+    nPphi_tau=int(fid.readline(8))
+    nH_tau=int(fid.readline(8))
+    fid.readline(1)
+    tau_file=np.zeros((nmu_tau,nPphi_tau,nH_tau),dtype=float)
+    norb_tau=nmu_tau*nPphi_tau*nH_tau
+    for iorb in range(norb_tau):
+      imu=int(iorb/(nPphi_tau*nH_tau))
+      iPphi=int((iorb-imu*nPphi_tau*nH_tau)/nH_tau)
+      iH=iorb-imu*nPphi_tau*nH_tau-iPphi*nH_tau
+      value=fid.readline(20)
+      tau_file[imu,iPphi,iH]=value
+      if ((iorb+1)%4)==0: fid.readline(1)
+    fid.close()
+    #interpolate
+    wmu=np.zeros((2,),dtype=float)
+    wPphi=np.zeros((2,),dtype=float)
+    wH=np.zeros((2,),dtype=float)
+    norb=nmu*nPphi*nH
+    tau_opt=np.zeros((norb,),dtype=float)
+    for iorb in range(norb):
+      imu=int(iorb/(nPphi*nH))
+      iPphi=int((iorb-imu*nPphi*nH)/nH)
+      iH=iorb-imu*nPphi*nH-iPphi*nH
+      wmu[0]=float(imu*(nmu_tau-1))/float(nmu-1)
+      imu_tau=math.floor(wmu[0])
+      wmu[1]=wmu[0]-float(imu_tau)
+      wmu[0]=1.0-wmu[1]
+      if imu==nmu-1:
+        wmu=[0,1]
+        imu_tau=nmu_tau-2
+      wPphi[0]=float(iPphi*(nPphi_tau-1))/float(nPphi-1)
+      iPphi_tau=math.floor(wPphi[0])
+      wPphi[1]=wPphi[0]-float(iPphi_tau)
+      wPphi[0]=1.0-wPphi[1]
+      if iPphi==nPphi-1:
+        wPphi=[0,1]
+        iPphi_tau=nPphi_tau-2
+      wH[0]=float(iH*(nH_tau-1))/float(nH-1)
+      iH_tau=math.floor(wH[0])
+      wH[1]=wH[0]-float(iH_tau)
+      wH[0]=1.0-wH[1]
+      if iH==nH-1:
+        wH=[0,1]
+        iH_tau=nH_tau-2
+      tmp=tau_file[imu_tau:imu_tau+2,iPphi_tau:iPphi_tau+2,iH_tau:iH_tau+2]
+      tau_opt[iorb]=tmp[0,0,0]*wmu[0]*wPphi[0]*wH[0]+tmp[0,0,1]*wmu[0]*wPphi[0]*wH[1]\
+                           +tmp[0,1,0]*wmu[0]*wPphi[1]*wH[0]+tmp[0,1,1]*wmu[0]*wPphi[1]*wH[1]\
+                           +tmp[1,0,0]*wmu[1]*wPphi[0]*wH[0]+tmp[1,0,1]*wmu[1]*wPphi[0]*wH[1]\
+                           +tmp[1,1,0]*wmu[1]*wPphi[1]*wH[0]+tmp[1,1,1]*wmu[1]*wPphi[1]*wH[1]
+    #end for iorb
+    sum_tau=sum(tau_opt)
+    avg_tau=float(sum_tau)/float(size)
+    accuml_tau=0
+    iorb1_list=np.zeros((size,),dtype=int)
+    iorb2_list=np.zeros((size,),dtype=int)
+    iorb1_list[:]=1
+    iorb2_list[:]=norb
+    iorb=0
+    for ipe in range(size-1):
+      iorb=iorb+1
+      accuml_tau=accuml_tau+tau_opt[iorb-1]
+      while ((accuml_tau<avg_tau)and(norb-iorb>size-ipe)):
+        iorb=iorb+1
+        accuml_tau=accuml_tau+tau_opt[iorb-1]
+ 
+      accuml_tau=accuml_tau-avg_tau
+      iorb2_list[ipe]=iorb
+      iorb1_list[ipe+1]=iorb+1
+  else:#for rank!=0
+    iorb1_list,iorb2_list=[None]*2
+  iorb1_list,iorb2_list=comm.bcast((iorb1_list,iorb2_list),root=0)
+  iorb1=iorb1_list[rank]-1#start from 0
+  iorb2=iorb2_list[rank]-1
+  mynorb=iorb2-iorb1+1
+  norb_list=iorb2_list-iorb1_list+1
+else:#parition orbit based on orbit indices, will cause large load imbalance
+  if rank==0:
+    norb=nmu*nPphi*nH
+    norb_avg=int(norb/size)
+    norb_last=norb-norb_avg*(size-1)
+    norb_list=np.zeros((size,1),dtype=int)
+    norb_list[:]=norb_avg
+    if norb_last>norb_avg:
+      for irank in range(norb_last-norb_avg): norb_list[irank]=norb_list[irank]+1
 
-norb_list=comm.bcast(norb_list,root=0)
-mynorb=int(norb_list[rank])
-iorb1=int(sum(norb_list[0:rank]))
-iorb2=iorb1+mynorb-1
+  else:
+    norb_list=None
+  norb_list=comm.bcast(norb_list,root=0)
+  mynorb=int(norb_list[rank])
+  iorb1=int(sum(norb_list[0:rank]))
+  iorb2=iorb1+mynorb-1
+
 #determine orbit trajectories through RK4 integration
 r_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 z_orb=np.zeros((mynorb,nt),dtype=float,order='C')
@@ -81,7 +164,7 @@ vp_orb=np.zeros((mynorb,nt),dtype=float,order='C')
 steps_orb=np.zeros((mynorb,),dtype=int)
 dt_orb_out_orb=np.zeros((mynorb,),dtype=float)
 if determine_loss: loss_orb=np.zeros((mynorb,),dtype=int)
-if debug: tau_orb=np.zeros((mynorb,),dtype=float)
+tau_orb=np.zeros((mynorb,),dtype=float)
 t_beg_tot=time.time()
 for iorb in range(iorb1,iorb2+1):
   imu=int(iorb/(nPphi*nH))
@@ -102,14 +185,14 @@ for iorb in range(iorb1,iorb2+1):
   lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
   t_end=time.time()
-  print('rank=',rank,', orb=',iorb,', tau=',tau,', cpu time=',t_end-t_beg,'s',flush=True)
+  print('rank=',rank,', orb=',iorb,', cpu time=',t_end-t_beg,'s',flush=True)
   r_orb[iorb-iorb1,:]=r_orb1
   z_orb[iorb-iorb1,:]=z_orb1
   vp_orb[iorb-iorb1,:]=vp_orb1
   steps_orb[iorb-iorb1]=step
   dt_orb_out_orb[iorb-iorb1]=dt_orb_out
   if (lost)and(determine_loss): loss_orb[iorb-iorb1]=1
-  if debug: tau_orb[iorb-iorb1]=tau
+  tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
 comm.barrier()
 print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
@@ -130,23 +213,25 @@ if determine_loss:
       output.write('%1d\n'%value)
     output.write('%8d\n'%-1)
     output.close()
-#output tau separately for debug
-if debug: 
-  if rank==0:
-    count1=norb_list
-    tau_output=np.zeros((norb,),dtype=float)
-  else:
-    tau_output=None
-    count1=None
-  comm.Gatherv(tau_orb,(tau_output,count1),root=0)
-  if rank==0:
-    output=open('tau.txt','w')
-    count=0
-    for iorb in range(norb):
-      count=count+1
-      value=tau_output[iorb]
-      output.write('%19.10E'%value)
-      if count%4==0: output.write('\n')
+comm.barrier()
+#output tau separately for debug and orbit partition optimization
+if rank==0:
+  count1=norb_list
+  tau_output=np.zeros((norb,),dtype=float)
+else:
+  tau_output=None
+  count1=None
+comm.Gatherv(tau_orb,(tau_output,count1),root=0)
+if rank==0:
+  output=open('tau.txt','w')
+  output.write('%8d%8d%8d\n'% (nmu,nPphi,nH))
+  count=0
+  for iorb in range(norb):
+    count=count+1
+    value=tau_output[iorb]
+    output.write('%19.10E '%value)
+    if count%4==0: output.write('\n')
+comm.barrier()
 
 #the following are for xgc to read
 adios2_mpi=False
