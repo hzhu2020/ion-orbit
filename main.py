@@ -40,7 +40,10 @@ if var.Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
 else:
   Pphi_arr=-mi*var.Ra*vphi_arr+qi*var.psi_surf
 #H array
+t_beg=time.time()
 r_beg,z_beg,r_end,z_end=var.H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,MPI.SUM)
+t_end=time.time()
+if rank==0: print('Setting up H array took time:',t_end-t_beg,'s',flush=True)
 #output arrays for integration
 if rank==0:
   dmu=mu_arr[0]*2

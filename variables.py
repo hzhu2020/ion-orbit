@@ -22,7 +22,7 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
     fout=f2d[iy,ix]*(1-wy)*(1-wx) + f2d[iy+1,ix]*wy*(1-wx)\
         +f2d[iy,ix+1]*(1-wy)*wx + f2d[iy+1,ix+1]*wy*wx
 
-  return fout
+  return ix,iy,wx,wy,fout
 
 def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   #read mesh
@@ -180,12 +180,23 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
   Bsurf=np.zeros((nsurf,),dtype=float)#magnitude of B 
   dpotsurf=np.zeros((nsurf,),dtype=float)#m/=0 potential along the surface
   covbphisurf=np.zeros((nsurf,),dtype=float)#covariant component \vec{b}\cdot(dX/d\phi)
+  ix=np.zeros((nsurf,),dtype=int)
+  iy=np.zeros((nsurf,),dtype=int)
+  wx=np.zeros((nsurf,),dtype=float)
+  wy=np.zeros((nsurf,),dtype=float)
   for i in range(nsurf):
     r,z=rsurf[i],zsurf[i]
-    Bsurf[i]=varTwoD(R,Z,Bmag,r,z)
+    ix[i],iy[i],wx[i],wy[i],Bsurf[i]=varTwoD(R,Z,Bmag,r,z)
+    if np.isnan(Bsurf[i]):
+      if comm.Get_rank()==0: print('Setting up H_arr: something wrong at',i,'th point on the surface.')
+      exit()
     if not(gyro_E):
-      dpotsurf[i]=varTwoD(R,Z,dpot,r,z)
-    covbphisurf[i]=r*varTwoD(R,Z,Bphi,r,z)/Bsurf[i]
+      dpotsurf[i]=dpot[iy[i],ix[i]]*(1-wy[i])*(1-wx[i]) + dpot[iy[i]+1,ix[i]]*wy[i]*(1-wx[i])\
+                 +dpot[iy[i],ix[i]+1]*(1-wy[i])*wx[i] + dpot[iy[i]+1,ix[i]+1]*wy[i]*wx[i]
+
+    Bphisurf=Bphi[iy[i],ix[i]]*(1-wy[i])*(1-wx[i]) + Bphi[iy[i]+1,ix[i]]*wy[i]*(1-wx[i])\
+               +Bphi[iy[i],ix[i]+1]*(1-wy[i])*wx[i] + Bphi[iy[i]+1,ix[i]+1]*wy[i]*wx[i]
+    covbphisurf[i]=r*Bphisurf/Bsurf[i]
   
   if not(gyro_E):
     #smooth dpotsurf
@@ -222,10 +233,11 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
     imu=int(itask/(nPphi))
     iPphi=itask-imu*nPphi
     if gyro_E:
+      tmp=gyrodpot[:,:,imu]+gyropot0[:,:,imu]-pot0
       dpotsurf[:]=0.0
       for i in range(nsurf):
-        r,z=rsurf[i],zsurf[i]
-        dpotsurf[i]=varTwoD(R,Z,gyrodpot[:,:,imu]+gyropot0[:,:,imu]-pot0,r,z)
+        dpotsurf[i]=tmp[iy[i],ix[i]]*(1-wy[i])*(1-wx[i]) + tmp[iy[i]+1,ix[i]]*wy[i]*(1-wx[i])\
+                   +tmp[iy[i],ix[i]+1]*(1-wy[i])*wx[i] + tmp[iy[i]+1,ix[i]+1]*wy[i]*wx[i]
       #smooth dpotsurf
       tmp=np.fft.fft(dpotsurf)
       freq=nsurf*np.fft.fftfreq(nsurf)
