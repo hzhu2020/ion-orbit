@@ -92,6 +92,10 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
 def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
   global gyropot0,gyrodpot
   Nz,Nr=np.shape(Er00)
+  dr=rlin[1]-rlin[0]
+  dz=zlin[1]-zlin[0]
+  r0=rlin[0]
+  z0=zlin[0]
   Nmu=np.size(mu_arr)
   gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
@@ -132,16 +136,22 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
       angle=2*np.pi*float(igyro)/float(ngyro)
       r1=r+rho*np.cos(angle)
       z1=z+rho*np.sin(angle)
-      tmp=varTwoD(R,Z,pot0,r1,z1)
-      if np.isnan(tmp):
+      ir1=math.floor((r1-r0)/dr)
+      wr=(r1-r0)/dr-ir1
+      iz1=math.floor((z1-z0)/dz)
+      wz=(z1-z0)/dz-iz1
+      if (ir1<0) or (ir1>Nr-2) or (iz1<0) or (iz1>Nz-2):
         gyropot0[iz,ir,imu]=np.nan
-      else:
-        gyropot0[iz,ir,imu]=gyropot0[iz,ir,imu]+tmp/float(ngyro)
-      tmp=varTwoD(R,Z,dpot,r1,z1)
-      if np.isnan(tmp):
         gyrodpot[iz,ir,imu]=np.nan
+        tmp1=np.nan
+        tmp2=np.nan
       else:
-        gyrodpot[iz,ir,imu]=gyrodpot[iz,ir,imu]+tmp/float(ngyro)
+        tmp1=pot0[iz1,ir1]*(1-wz)*(1-wr) + pot0[iz1+1,ir1]*wz*(1-wr)\
+            +pot0[iz1,ir1+1]*(1-wz)*wr + pot0[iz1+1,ir1+1]*wz*wr
+        tmp2=dpot[iz1,ir1]*(1-wz)*(1-wr) + dpot[iz1+1,ir1]*wz*(1-wr)\
+            +dpot[iz1,ir1+1]*(1-wz)*wr + dpot[iz1+1,ir1+1]*wz*wr
+        gyropot0[iz,ir,imu]=gyropot0[iz,ir,imu]+tmp1/float(ngyro)
+        gyrodpot[iz,ir,imu]=gyrodpot[iz,ir,imu]+tmp2/float(ngyro)
   #end for itask
   gyropot0=comm.allreduce(gyropot0,op=summation)
   gyrodpot=comm.allreduce(gyrodpot,op=summation)
