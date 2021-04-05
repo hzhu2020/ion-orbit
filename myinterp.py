@@ -54,4 +54,4 @@ def TwoD(f2d,xin,yin):
     fout=f2d[iy,ix]*(1-wy)*(1-wx) + f2d[iy+1,ix]*wy*(1-wx)\
         +f2d[iy,ix+1]*(1-wy)*wx + f2d[iy+1,ix+1]*wy*wx
 
-  return fout
+  return ix,iy,wx,wy,fout

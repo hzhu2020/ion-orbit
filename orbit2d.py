@@ -18,8 +18,12 @@ def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max
   za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
 
   r=np.sqrt(x**2+y**2)
-  Bmag=myinterp.TwoD(var.Bmag,r,z)
-  Bphi=myinterp.TwoD(var.Bphi,r,z)
+  ix,iy,wx,wy,Bmag=myinterp.TwoD(var.Bmag,r,z)
+  if np.isnan(Bmag):
+    print('Wrong initial orbit locations: iorb=',iorb,'r=',r_beg,'z=',z_beg)
+    exit()
+  Bphi=var.Bphi[iy,ix]*(1-wy)*(1-wx) + var.Bphi[iy+1,ix]*wy*(1-wx)\
+      +var.Bphi[iy,ix+1]*(1-wy)*wx + var.Bphi[iy+1,ix+1]*wy*wx
   vp=(Pphi-qi*var.psi_surf)/mi/r/Bphi*Bmag
   #H,dHdr,dHdz=var.H2d(mu,Pphi,mi,qi)
   #H0=myinterp.TwoD(H,r,z)
@@ -108,6 +112,7 @@ def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max
     tau=tau+dt_orb
     #check if the orbit has crossed the surface
     psi=myinterp.TwoD(var.psi2d,r,z)
+    psi=psi[4]
     theta=math.atan2(z-za,r-ra)
     if theta<=var.theta[0]: theta=theta+2*np.pi
     dist=np.sqrt((r-ra)**2+(z-za)**2)
@@ -162,28 +167,42 @@ def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max
 
 def rhs(qi,mi,r,z,mu,vp):
     #B
-    Br=myinterp.TwoD(var.Br,r,z)
-    Bphi=myinterp.TwoD(var.Bphi,r,z)
-    Bz=myinterp.TwoD(var.Bz,r,z)
+    ix,iy,wx,wy,Br=myinterp.TwoD(var.Br,r,z)
+    if np.isnan(Br):
+      return np.nan,np.nan,np.nan
+
+    Bphi=var.Bphi[iy,ix]*(1-wy)*(1-wx) + var.Bphi[iy+1,ix]*wy*(1-wx)\
+        +var.Bphi[iy,ix+1]*(1-wy)*wx + var.Bphi[iy+1,ix+1]*wy*wx
+    Bz=var.Bz[iy,ix]*(1-wy)*(1-wx) + var.Bz[iy+1,ix]*wy*(1-wx)\
+        +var.Bz[iy,ix+1]*(1-wy)*wx + var.Bz[iy+1,ix+1]*wy*wx
     Bmag=np.sqrt(Br**2+Bz**2+Bphi**2)
     #b
     br=Br/Bmag
     bphi=Bphi/Bmag
     bz=Bz/Bmag
     #E
-    Er00=myinterp.TwoD(myEr00,r,z)
-    Ez00=myinterp.TwoD(myEz00,r,z)
-    Er0m=myinterp.TwoD(myEr0m,r,z)
-    Ez0m=myinterp.TwoD(myEz0m,r,z)
+    Er00=myEr00[iy,ix]*(1-wy)*(1-wx) + myEr00[iy+1,ix]*wy*(1-wx)\
+        +myEr00[iy,ix+1]*(1-wy)*wx + myEr00[iy+1,ix+1]*wy*wx
+    Ez00=myEz00[iy,ix]*(1-wy)*(1-wx) + myEz00[iy+1,ix]*wy*(1-wx)\
+        +myEz00[iy,ix+1]*(1-wy)*wx + myEz00[iy+1,ix+1]*wy*wx
+    Er0m=myEr0m[iy,ix]*(1-wy)*(1-wx) + myEr0m[iy+1,ix]*wy*(1-wx)\
+        +myEr0m[iy,ix+1]*(1-wy)*wx + myEr0m[iy+1,ix+1]*wy*wx
+    Ez0m=myEz0m[iy,ix]*(1-wy)*(1-wx) + myEz0m[iy+1,ix]*wy*(1-wx)\
+        +myEz0m[iy,ix+1]*(1-wy)*wx + myEz0m[iy+1,ix+1]*wy*wx
     Er=Er00+Er0m
     Ez=Ez00+Ez0m
     #gradB
-    gradBr=myinterp.TwoD(var.gradBr,r,z)
-    gradBz=myinterp.TwoD(var.gradBz,r,z)
+    gradBr=var.gradBr[iy,ix]*(1-wy)*(1-wx) + var.gradBr[iy+1,ix]*wy*(1-wx)\
+        +var.gradBr[iy,ix+1]*(1-wy)*wx + var.gradBr[iy+1,ix+1]*wy*wx
+    gradBz=var.gradBz[iy,ix]*(1-wy)*(1-wx) + var.gradBz[iy+1,ix]*wy*(1-wx)\
+        +var.gradBz[iy,ix+1]*(1-wy)*wx + var.gradBz[iy+1,ix+1]*wy*wx
     #curlb
-    curlbr=myinterp.TwoD(var.curlbr,r,z)
-    curlbphi=myinterp.TwoD(var.curlbphi,r,z)
-    curlbz=myinterp.TwoD(var.curlbz,r,z)
+    curlbr=var.curlbr[iy,ix]*(1-wy)*(1-wx) + var.curlbr[iy+1,ix]*wy*(1-wx)\
+        +var.curlbr[iy,ix+1]*(1-wy)*wx + var.curlbr[iy+1,ix+1]*wy*wx
+    curlbphi=var.curlbphi[iy,ix]*(1-wy)*(1-wx) + var.curlbphi[iy+1,ix]*wy*(1-wx)\
+        +var.curlbphi[iy,ix+1]*(1-wy)*wx + var.curlbphi[iy+1,ix+1]*wy*wx
+    curlbz=var.curlbz[iy,ix]*(1-wy)*(1-wx) + var.curlbz[iy+1,ix]*wy*(1-wx)\
+        +var.curlbz[iy,ix+1]*(1-wy)*wx + var.curlbz[iy+1,ix+1]*wy*wx
     #equation of motion
     rhop=mi*vp/qi/Bmag
     D=1.+rhop*(br*curlbr+bz*curlbz+bphi*curlbphi)
