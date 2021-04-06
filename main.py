@@ -15,6 +15,12 @@ import orbit2d as orbit
 comm = MPI.COMM_WORLD
 size = comm.Get_size()
 rank = comm.Get_rank()
+try:
+  import cupy as cp
+  if rank==0: print('Using CuPy for GPU acceleration.')
+  use_gpu=True
+except:
+  use_gpu=False
 #initialize some global variables
 vt=np.sqrt(1.60217552E-19*Ti/mi) #thermal speed
 var.init(pot0fac,dpotfac,Nr,Nz,comm,rank)
@@ -31,7 +37,7 @@ vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
 #prepare gyro-averaged electric field
 if (gyro_E):
   t_beg=time.time()
-  var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM)
+  var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM,use_gpu)
   t_end=time.time()
   if rank==0: print('Gyroavering electric field took time:',t_end-t_beg,'s',flush=True)
 #vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0

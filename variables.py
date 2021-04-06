@@ -89,34 +89,89 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   Ez0m=-Ez0m
   Ephi0m=-Ephi0m
 
-def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
-  global gyropot0,gyrodpot
-  Nz,Nr=np.shape(Er00)
+def gyropot_gpu(mi,qi,ngyro,itask1,itask2,Nz,Nr,mu_arr):
+  import cupy as cp
+  gyro_pot=cp.ElementwiseKernel(
+  'float64 mi, float64 qi, int64 ngyro, int64 itask1, int64 itask2, int64 Nr, int64 Nz, int64 Nmu,\
+    raw float64 Bmag, raw float64 mu_arr, raw float64 rlin, raw float64 zlin, raw float64 pot0, raw float64 dpot',
+  'raw float64 gyropot0, raw float64 gyrodpot',
+  '''
+  int itask, iz, ir, imu, igyro;
+  double mu, B, r, z, rho, angle, r1, z1, tmp1, tmp2;
+  int ir1, iz1;
+  double r0, z0, dr, dz, wr, wz;
+  r0=rlin[0];
+  z0=zlin[0];
+  dr=rlin[1]-rlin[0];
+  dz=zlin[1]-zlin[0];
+  for (itask=itask1;itask<=itask2;itask++){
+    iz=int(itask/(Nr*Nmu));
+    ir=int((itask-iz*Nr*Nmu)/Nmu);
+    imu=itask-iz*Nr*Nmu-ir*Nmu;
+    mu=mu_arr[imu];
+    B=Bmag[iz*Nz+ir];
+    r=rlin[ir];
+    z=zlin[iz];
+    if (isnan(B)){
+      gyropot0[itask]=nan("");
+      gyrodpot[itask]=nan("");
+      continue;
+    }
+    gyropot0[itask]=0.0;
+    gyrodpot[itask]=0.0;
+    rho=sqrt(2*mi*mu/B/qi/qi);
+    for (igyro=0;igyro<ngyro;igyro++){
+      angle=8.*atan(1.)*double(igyro)/double(ngyro);
+      r1=r+rho*cos(angle);
+      z1=z+rho*sin(angle);
+      ir1=floor((r1-r0)/dr);
+      iz1=floor((z1-z0)/dz);
+      wr=(r1-r0)/dr-ir1;
+      wz=(z1-z0)/dz-iz1;
+      if ((ir1<0)||(ir1>Nr-2)||(iz1<0)||(iz1>Nz-2)){
+        tmp1=nan("");
+        tmp2=nan("");
+      }else{
+        tmp1=pot0[iz1*Nz+ir1]*(1-wz)*(1-wr)+pot0[(iz1+1)*Nz+ir1]*wz*(1-wr)\
+            +pot0[iz1*Nz+ir1+1]*(1-wz)*wr+pot0[(iz1+1)*Nz+ir1+1]*wz*wr;
+        tmp2=dpot[iz1*Nz+ir1]*(1-wz)*(1-wr)+dpot[(iz1+1)*Nz+ir1]*wz*(1-wr)\
+            +dpot[iz1*Nz+ir1+1]*(1-wz)*wr+dpot[(iz1+1)*Nz+ir1+1]*wz*wr;
+      } 
+      gyropot0[itask]+=tmp1/double(ngyro);
+      gyrodpot[itask]+=tmp2/double(ngyro);
+    }
+  }
+  ''',
+  'gyro_pot')
+
+  Nmu=np.size(mu_arr)
+  itask1_gpu=cp.asarray([itask1],dtype=cp.int64)
+  itask2_gpu=cp.asarray([itask2],dtype=cp.int64)
+  Nr_gpu=cp.asarray([Nr],dtype=cp.int64)
+  Nz_gpu=cp.asarray([Nz],dtype=cp.int64)
+  Nmu_gpu=cp.asarray([Nmu],dtype=cp.int64)
+  mu_arr_gpu=cp.asarray(mu_arr,dtype=cp.float64)
+  Bmag_gpu=cp.asarray(Bmag,dtype=cp.float64).ravel()
+  rlin_gpu=cp.asarray(rlin,dtype=cp.float64)
+  zlin_gpu=cp.asarray(zlin,dtype=cp.float64)
+  pot0_gpu=cp.asarray(pot0,dtype=cp.float64).ravel()
+  dpot_gpu=cp.asarray(dpot,dtype=cp.float64).ravel()
+  gyropot0_gpu=cp.zeros((Nz*Nr*Nmu),dtype=cp.float64)
+  gyrodpot_gpu=cp.zeros((Nz*Nr*Nmu),dtype=cp.float64)
+  gyro_pot(mi,qi,ngyro,itask1_gpu,itask2_gpu,Nr_gpu,Nz_gpu,Nmu_gpu,Bmag_gpu,mu_arr_gpu,\
+  rlin_gpu,zlin_gpu,pot0_gpu,dpot_gpu,gyropot0_gpu,gyrodpot_gpu)
+  gyropot0_gpu=gyropot0_gpu.reshape(Nz,Nr,Nmu)
+  gyrodpot_gpu=gyrodpot_gpu.reshape(Nz,Nr,Nmu)
+  return cp.asnumpy(gyropot0_gpu),cp.asnumpy(gyrodpot_gpu)
+
+def gyropot_cpu(mi,qi,ngyro,itask1,itask2,Nz,Nr,mu_arr):
+  Nmu=np.size(mu_arr)
   dr=rlin[1]-rlin[0]
   dz=zlin[1]-zlin[0]
   r0=rlin[0]
   z0=zlin[0]
-  Nmu=np.size(mu_arr)
   gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
-  rank=comm.Get_rank()
-  size=comm.Get_size()
-  #parition in (r,z,mu) just like the orbit partitioning
-  if rank==0:
-    ntasks=Nr*Nz*Nmu
-    ntasks_avg=int(ntasks/size)
-    ntasks_last=ntasks-ntasks_avg*(size-1)
-    ntasks_list=np.zeros((size,1),dtype=int)
-    ntasks_list[:]=ntasks_avg
-    if ntasks_last>ntasks_avg:
-      for irank in range(ntasks_last-ntasks_avg): ntasks_list[irank]=ntasks_list[irank]+1
-  else:
-    ntasks_list=None
-
-  ntasks_list=comm.bcast(ntasks_list,root=0)
-  myntasks=int(ntasks_list[rank])
-  itask1=int(sum(ntasks_list[0:rank]))
-  itask2=itask1+myntasks-1
   for itask in range(itask1,itask2+1):
     iz=int(itask/(Nr*Nmu))
     ir=int((itask-iz*Nr*Nmu)/Nmu)
@@ -153,6 +208,34 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
         gyropot0[iz,ir,imu]=gyropot0[iz,ir,imu]+tmp1/float(ngyro)
         gyrodpot[iz,ir,imu]=gyrodpot[iz,ir,imu]+tmp2/float(ngyro)
   #end for itask
+  return gyropot0,gyrodpot
+
+def gyropot(comm,mu_arr,qi,mi,ngyro,summation,use_gpu):
+  global gyropot0,gyrodpot
+  Nz,Nr=np.shape(Er00)
+  Nmu=np.size(mu_arr)
+  rank=comm.Get_rank()
+  size=comm.Get_size()
+  #parition in (r,z,mu) just like the orbit partitioning
+  if rank==0:
+    ntasks=Nr*Nz*Nmu
+    ntasks_avg=int(ntasks/size)
+    ntasks_last=ntasks-ntasks_avg*(size-1)
+    ntasks_list=np.zeros((size,1),dtype=int)
+    ntasks_list[:]=ntasks_avg
+    if ntasks_last>ntasks_avg:
+      for irank in range(ntasks_last-ntasks_avg): ntasks_list[irank]=ntasks_list[irank]+1
+  else:
+    ntasks_list=None
+
+  ntasks_list=comm.bcast(ntasks_list,root=0)
+  myntasks=int(ntasks_list[rank])
+  itask1=int(sum(ntasks_list[0:rank]))
+  itask2=itask1+myntasks-1
+  if use_gpu:
+    gyropot0,gyrodpot=gyropot_gpu(mi,qi,ngyro,itask1,itask2,Nz,Nr,mu_arr)
+  else:
+    gyropot0,gyrodpot=gyropot_cpu(mi,qi,ngyro,itask1,itask2,Nz,Nr,mu_arr)
   gyropot0=comm.allreduce(gyropot0,op=summation)
   gyrodpot=comm.allreduce(gyrodpot,op=summation)
   return
