@@ -5,19 +5,18 @@ import math
 import os
 from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
 
-def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max_step):
+def tau_orb(calc_gyroE,iorb,qi,mi,r_beg,z_beg,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max_step):
   global myEr00,myEz00,myEr0m,myEz0m
   if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(iorb)
   
   dt_orb=dt_xgc/float(nsteps)
   dt_orb_out=0.0
-  r_beg=np.sqrt(x**2+y**2)
-  z_beg=z
+  r=r_beg
+  z=z_beg
   #prepare the axis position
   ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
   za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
 
-  r=np.sqrt(x**2+y**2)
   ix,iy,wx,wy,Bmag=myinterp.TwoD(var.Bmag,r,z)
   if np.isnan(Bmag):
     print('Wrong initial orbit locations: iorb=',iorb,'r=',r_beg,'z=',z_beg)
@@ -36,7 +35,6 @@ def tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max
   z_tmp=np.zeros((np.int(max_step),),dtype=float)
   vp_tmp=np.zeros((np.int(max_step),),dtype=float)
 
-  r=np.sqrt(x**2+y**2)
   tau=0
   step_count=0
   num_cross=0 #number of times the orbit has crossed the surface

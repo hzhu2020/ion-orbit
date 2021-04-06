@@ -181,7 +181,7 @@ for iorb in range(iorb1,iorb2+1):
   iH=iorb-imu*nPphi*nH-iPphi*nH
   mu=mu_arr[imu]
   Pphi=Pphi_arr[iPphi]
-  x,y,z=r_beg[imu,iPphi,iH],0,z_beg[imu,iPphi,iH]
+  r,z=r_beg[imu,iPphi,iH],z_beg[imu,iPphi,iH]
   t_beg=time.time()
   if iorb==iorb1:
     calc_gyroE=True
@@ -191,7 +191,7 @@ for iorb in range(iorb1,iorb2+1):
     mu_old=mu
   else:
     calc_gyroE=False
-  lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,x,y,z,\
+  lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,r,z,\
       r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
   t_end=time.time()
   print('rank=',rank,', orb=',iorb,', cpu time=',t_end-t_beg,'s',flush=True)
