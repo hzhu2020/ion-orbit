@@ -127,16 +127,16 @@ def tau_orb(calc_gyroE,iorb,qi,mi,r_beg,z_beg,r_end,z_end,mu,Pphi,dt_xgc,nt,nste
       else:
         dt_orb_out=tau/np.float(nt)
         step_count=nt
-        for it in range(nt):
-          t_ind=math.floor(np.float(it)*dt_orb_out/dt_orb)
-          wt=np.float(it)*dt_orb_out/dt_orb - t_ind
+        for it2 in range(nt):
+          t_ind=math.floor(np.float(it2)*dt_orb_out/dt_orb)
+          wt=np.float(it2)*dt_orb_out/dt_orb - t_ind
           if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
             t_ind=t_ind-1
             wt=1.0
           if abs(r_tmp[t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value 
-          r_orb1[it]=(1-wt)*r_tmp[t_ind]+wt*r_tmp[t_ind+1]
-          z_orb1[it]=(1-wt)*z_tmp[t_ind]+wt*z_tmp[t_ind+1]
-          vp_orb1[it]=(1-wt)*vp_tmp[t_ind]+wt*vp_tmp[t_ind+1]
+          r_orb1[it2]=(1-wt)*r_tmp[t_ind]+wt*r_tmp[t_ind+1]
+          z_orb1[it2]=(1-wt)*z_tmp[t_ind]+wt*z_tmp[t_ind+1]
+          vp_orb1[it2]=(1-wt)*vp_tmp[t_ind]+wt*vp_tmp[t_ind+1]
       if (not determine_loss): break
 
     if (num_cross==1) and \
