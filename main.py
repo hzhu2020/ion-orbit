@@ -17,14 +17,17 @@ size = comm.Get_size()
 rank = comm.Get_rank()
 try:
   import cupy as cp
-  if rank==0: print('Using CuPy for GPU acceleration.')
+  if rank==0: print('Using CuPy for GPU acceleration.\nOrbits are not outputed to debug_dir in GPU mode.')
   use_gpu=True
 except:
   use_gpu=False
 #initialize some global variables
 vt=np.sqrt(1.60217552E-19*Ti/mi) #thermal speed
+t_beg=time.time()
 var.init(pot0fac,dpotfac,Nr,Nz,comm,rank)
 myinterp.init(var.R,var.Z)
+t_end=time.time()
+if rank==0: print('Initialization took time:',t_end-t_beg,'s',flush=True)
 if (debug) and (rank==0):
   plots.plotEB()
   plots.write_surf()
@@ -191,8 +194,12 @@ for iorb in range(iorb1,iorb2+1):
     mu_old=mu
   else:
     calc_gyroE=False
-  lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,r,z,\
-      r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
+  if use_gpu:
+    lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb_gpu(calc_gyroE,iorb,qi,mi,r,z,\
+        r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
+  else:
+    lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,r,z,\
+        r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
   t_end=time.time()
   print('rank=',rank,', orb=',iorb,', cpu time=',t_end-t_beg,'s',flush=True)
   r_orb[iorb-iorb1,:]=r_orb1
