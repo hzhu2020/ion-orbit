@@ -367,6 +367,10 @@ def tau_orb_gpu(calc_gyroE,iorb,qi,mi,r_beg,z_beg,r_end,z_end,mu,Pphi,dt_xgc,nt,
         break;
       }
     }//end of rk4 loop
+    if (isnan(rc+zc)||isnan(r+z)){
+      if (num_cross==1) lost=true;
+      break;
+    }
     tau=tau+dt_orb;
     ir=floor((r-r0)/dr);
     iz=floor((z-z0)/dz);
