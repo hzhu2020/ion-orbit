@@ -3,7 +3,8 @@ import math
 import setup
 import myinterp
 from parameters import partition_opt,bp_write,qi,mi,Ti,f0_vp_max,f0_smu_max,pot0fac,dpotfac,\
-                       Nr,Nz,nmu,nPphi,nH,nt,dt_xgc,nsteps,max_step,debug,determine_loss,gyro_E
+                       Nr,Nz,nmu,nPphi,nH,nt,dt_xgc,nsteps,max_step,debug,determine_loss,\
+                       gyro_E,write_parameters
 if gyro_E: from parameters import ngyro
 import variables as var
 from mpi4py import MPI
@@ -338,6 +339,7 @@ if (rank==0)and(not bp_write):
   output.close()
 elif (rank==0)and(bp_write)and(not adios2_mpi):
   output=adios2.open('orbit.bp','w')
+  write_parameters(output)
   #nmu, nPphi, nH, nt
   value=np.array(nmu)
   start=np.zeros((value.ndim),dtype=int) 
@@ -371,6 +373,7 @@ elif (rank==0)and(bp_write)and(not adios2_mpi):
   output.close()
 elif (bp_write)and(adios2_mpi):
   if rank==0:
+    write_parameters(output)
     value=np.array(nmu)
     start=np.zeros((value.ndim),dtype=int) 
     count=np.array((value.shape),dtype=int) 

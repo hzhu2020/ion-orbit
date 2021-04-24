@@ -45,3 +45,35 @@ cross_disttol=0.005 #percentage
 #for debug
 debug=False
 debug_dir='debug_dir'
+
+def write_parameters(output):
+  import numpy as np
+  output.write_attribute('determine_loss',np.array(1*determine_loss))
+  output.write_attribute('gyro_E',np.array(1*gyro_E))
+  output.write_attribute('ngyro',np.array(ngyro))
+  output.write_attribute('qi',np.array(qi))
+  output.write_attribute('mi',np.array(mi))
+  output.write_attribute('Ti',np.array(Ti))
+  output.write_attribute('f0_vp_max',np.array(f0_vp_max))
+  output.write_attribute('f0_smu_max',np.array(f0_smu_max))
+  output.write_attribute('pot0fac',np.array(pot0fac))
+  output.write_attribute('dpotfac',np.array(dpotfac))
+  output.write_attribute('dpot_fourier_maxm',np.array(dpot_fourier_maxm))
+  output.write_attribute('input_dir',input_dir)
+  output.write_attribute('pot_file',pot_file)
+  output.write_attribute('Nr',np.array(Nr))
+  output.write_attribute('Nz',np.array(Nz))
+  output.write_attribute('interp_method',interp_method)
+  output.write_attribute('nmu',np.array(nmu))
+  output.write_attribute('nPphi',np.array(nPphi))
+  output.write_attribute('nH',np.array(nH))
+  output.write_attribute('nt',np.array(nt))
+  output.write_attribute('max_step',np.array(max_step))
+  output.write_attribute('dt_xgc',np.array(dt_xgc))
+  output.write_attribute('nsteps',np.array(nsteps))
+  output.write_attribute('surf_psin',np.array(surf_psin))
+  output.write_attribute('surf_rztol',np.array(surf_rztol))
+  output.write_attribute('surf_psitol',np.array(surf_psitol))
+  output.write_attribute('cross_psitol',np.array(cross_psitol))
+  output.write_attribute('cross_rztol',np.array(cross_rztol))
+  output.write_attribute('cross_disttol',np.array(cross_disttol))
