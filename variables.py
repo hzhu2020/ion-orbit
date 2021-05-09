@@ -243,7 +243,7 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation,use_gpu):
 def efield(iorb):
   myEr00=Er00
   myEz00=Ez00
-  Nr,Nz=np.shape(Er00)
+  Nz,Nr=np.shape(Er00)
   if gyro_E:
     from parameters import nPphi,nH
     imu=int(iorb/(nPphi*nH))
