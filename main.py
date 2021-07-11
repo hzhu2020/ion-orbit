@@ -42,7 +42,10 @@ vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
 #prepare gyro-averaged electric field
 if (gyro_E):
   t_beg=time.time()
-  var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM,use_gpu)
+  if use_gpu:
+    var.gyropot_gpu(mu_arr,qi,mi,ngyro)
+  else:
+    var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM)
   t_end=time.time()
   if rank==0: print('Gyroavering electric field took time:',t_end-t_beg,'s',flush=True)
 #vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0
@@ -104,7 +107,7 @@ for iorb in range(iorb1,iorb2+1):
     mu_old=mu
   else:
     calc_gyroE=False
-  if use_gpu:
+  if False:#use_gpu:
     lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb_gpu(calc_gyroE,iorb,qi,mi,r,z,\
         r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
   else:
