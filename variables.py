@@ -46,7 +46,9 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
     Br,Bz,Bphi=setup.Bfield(rz,rlin,zlin)
   else:
     Br,Bz,Bphi=[None]*3
-  Br,Bz,Bphi=comm.bcast((Br,Bz,Bphi),root=0)
+  Br=comm.bcast(Br,root=0)
+  Bz=comm.bcast(Bz,root=0)
+  Bphi=comm.bcast(Bphi,root=0)
   Bmag=np.sqrt(Br**2+Bz**2+Bphi**2)
   br=Br/Bmag
   bz=Bz/Bmag
@@ -75,7 +77,8 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
     dpot=dpotfac*dpot
   else:
     pot0,dpot=[None]*2
-  pot0,dpot=comm.bcast((pot0,dpot),root=0)
+  pot0=comm.bcast(pot0,root=0)
+  dpot=comm.bcast(dpot,root=0)
 
   global Er00,Ez00,Ephi00
   Er00,Ez00,Ephi00=setup.Grad(rlin,zlin,pot0,Nr,Nz)
@@ -88,6 +91,8 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   Er0m=-Er0m
   Ez0m=-Ez0m
   Ephi0m=-Ephi0m
+
+  return
 
 def gyropot_gpu(mu_arr,qi,mi,ngyro):
   import cupy as cp
