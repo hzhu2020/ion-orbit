@@ -422,3 +422,105 @@ def H2d(mu,Pphi,mi,qi):
   H=mu*Bmag+0.5*mi*vp2d**2+qi*(pot0+dpot)
   gradHr,gradHz,gradHphi=setup.Grad(rlin,zlin,H,rlin.size,zlin.size)
   return H,gradHr,gradHz 
+
+def partition_orbits(comm,partition_opt,nmu,nPphi,nH):
+  rank = comm.Get_rank()
+  size = comm.Get_size()
+  if (partition_opt):#partition orbits based on the orbit length
+    if rank==0:
+      #read from file
+      from parameters import input_dir
+      fid=open(input_dir+'/tau.txt','r')
+      nmu_tau=int(fid.readline(8))
+      nPphi_tau=int(fid.readline(8))
+      nH_tau=int(fid.readline(8))
+      fid.readline(1)
+      tau_file=np.zeros((nmu_tau,nPphi_tau,nH_tau),dtype=float)
+      norb_tau=nmu_tau*nPphi_tau*nH_tau
+      for iorb in range(norb_tau):
+        imu=int(iorb/(nPphi_tau*nH_tau))
+        iPphi=int((iorb-imu*nPphi_tau*nH_tau)/nH_tau)
+        iH=iorb-imu*nPphi_tau*nH_tau-iPphi*nH_tau
+        value=fid.readline(20)
+        tau_file[imu,iPphi,iH]=value
+        if ((iorb+1)%4)==0: fid.readline(1)
+      fid.close()
+      #interpolate
+      wmu=np.zeros((2,),dtype=float)
+      wPphi=np.zeros((2,),dtype=float)
+      wH=np.zeros((2,),dtype=float)
+      norb=nmu*nPphi*nH
+      tau_opt=np.zeros((norb,),dtype=float)
+      for iorb in range(norb):
+        imu=int(iorb/(nPphi*nH))
+        iPphi=int((iorb-imu*nPphi*nH)/nH)
+        iH=iorb-imu*nPphi*nH-iPphi*nH
+        wmu[0]=float(imu*(nmu_tau-1))/float(nmu-1)
+        imu_tau=math.floor(wmu[0])
+        wmu[1]=wmu[0]-float(imu_tau)
+        wmu[0]=1.0-wmu[1]
+        if imu==nmu-1:
+          wmu=[0,1]
+          imu_tau=nmu_tau-2
+        wPphi[0]=float(iPphi*(nPphi_tau-1))/float(nPphi-1)
+        iPphi_tau=math.floor(wPphi[0])
+        wPphi[1]=wPphi[0]-float(iPphi_tau)
+        wPphi[0]=1.0-wPphi[1]
+        if iPphi==nPphi-1:
+          wPphi=[0,1]
+          iPphi_tau=nPphi_tau-2
+        wH[0]=float(iH*(nH_tau-1))/float(nH-1)
+        iH_tau=math.floor(wH[0])
+        wH[1]=wH[0]-float(iH_tau)
+        wH[0]=1.0-wH[1]
+        if iH==nH-1:
+          wH=[0,1]
+          iH_tau=nH_tau-2
+        tmp=tau_file[imu_tau:imu_tau+2,iPphi_tau:iPphi_tau+2,iH_tau:iH_tau+2]
+        tau_opt[iorb]=tmp[0,0,0]*wmu[0]*wPphi[0]*wH[0]+tmp[0,0,1]*wmu[0]*wPphi[0]*wH[1]\
+                             +tmp[0,1,0]*wmu[0]*wPphi[1]*wH[0]+tmp[0,1,1]*wmu[0]*wPphi[1]*wH[1]\
+                             +tmp[1,0,0]*wmu[1]*wPphi[0]*wH[0]+tmp[1,0,1]*wmu[1]*wPphi[0]*wH[1]\
+                             +tmp[1,1,0]*wmu[1]*wPphi[1]*wH[0]+tmp[1,1,1]*wmu[1]*wPphi[1]*wH[1]
+      #end for iorb
+      sum_tau=sum(tau_opt)
+      avg_tau=float(sum_tau)/float(size)
+      accuml_tau=0
+      iorb1_list=np.zeros((size,),dtype=int)
+      iorb2_list=np.zeros((size,),dtype=int)
+      iorb1_list[:]=1
+      iorb2_list[:]=norb
+      iorb=0
+      for ipe in range(size-1):
+        iorb=iorb+1
+        accuml_tau=accuml_tau+tau_opt[iorb-1]
+        while ((accuml_tau<avg_tau)and(norb-iorb>size-ipe)):
+          iorb=iorb+1
+          accuml_tau=accuml_tau+tau_opt[iorb-1]
+   
+        accuml_tau=accuml_tau-avg_tau
+        iorb2_list[ipe]=iorb
+        iorb1_list[ipe+1]=iorb+1
+    else:#for rank!=0
+      iorb1_list,iorb2_list=[None]*2
+    iorb1_list,iorb2_list=comm.bcast((iorb1_list,iorb2_list),root=0)
+    iorb1=iorb1_list[rank]-1#start from 0
+    iorb2=iorb2_list[rank]-1
+    mynorb=iorb2-iorb1+1
+    norb_list=iorb2_list-iorb1_list+1
+  else:#parition orbit based on orbit indices, will cause large load imbalance
+    if rank==0:
+      norb=nmu*nPphi*nH
+      norb_avg=int(norb/size)
+      norb_last=norb-norb_avg*(size-1)
+      norb_list=np.zeros((size,1),dtype=int)
+      norb_list[:]=norb_avg
+      if norb_last>norb_avg:
+        for irank in range(norb_last-norb_avg): norb_list[irank]=norb_list[irank]+1
+
+    else:
+      norb_list=None
+    norb_list=comm.bcast(norb_list,root=0)
+    mynorb=int(norb_list[rank])
+    iorb1=int(sum(norb_list[0:rank]))
+    iorb2=iorb1+mynorb-1
+  return iorb1,iorb2,norb_list
