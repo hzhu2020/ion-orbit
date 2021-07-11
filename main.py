@@ -8,7 +8,7 @@ from parameters import partition_opt,bp_write,qi,mi,Ti,f0_vp_max,f0_smu_max,pot0
 if gyro_E: from parameters import ngyro
 import variables as var
 from mpi4py import MPI
-import plots
+if debug: import plots
 import time
 import orbit2d as orbit
 
@@ -22,6 +22,7 @@ try:
   use_gpu=True
 except:
   use_gpu=False
+
 #initialize some global variables
 vt=np.sqrt(1.60217552E-19*Ti/mi) #thermal speed
 t_beg=time.time()
