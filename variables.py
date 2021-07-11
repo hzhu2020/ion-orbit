@@ -417,12 +417,6 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
   z_end=comm.allreduce(z_end,op=summation)
   return r_beg,z_beg,r_end,z_end
 
-def H2d(mu,Pphi,mi,qi):
-  vp2d=(Pphi-qi*psi2d)/mi/R/Bphi*Bmag
-  H=mu*Bmag+0.5*mi*vp2d**2+qi*(pot0+dpot)
-  gradHr,gradHz,gradHphi=setup.Grad(rlin,zlin,H,rlin.size,zlin.size)
-  return H,gradHr,gradHz 
-
 def partition_orbits(comm,partition_opt,nmu,nPphi,nH):
   rank = comm.Get_rank()
   size = comm.Get_size()

@@ -24,8 +24,6 @@ def tau_orb(calc_gyroE,iorb,qi,mi,r_beg,z_beg,r_end,z_end,mu,Pphi,dt_xgc,nt,nste
   Bphi=var.Bphi[iy,ix]*(1-wy)*(1-wx) + var.Bphi[iy+1,ix]*wy*(1-wx)\
       +var.Bphi[iy,ix+1]*(1-wy)*wx + var.Bphi[iy+1,ix+1]*wy*wx
   vp=(Pphi-qi*var.psi_surf)/mi/r/Bphi*Bmag
-  #H,dHdr,dHdz=var.H2d(mu,Pphi,mi,qi)
-  #H0=myinterp.TwoD(H,r,z)
 
   r_orb1=np.zeros((nt,),dtype=float)
   z_orb1=np.zeros((nt,),dtype=float)
