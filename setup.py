@@ -74,12 +74,12 @@ def Grad(r,z,fld,Nr,Nz):
   dz=z[2]-z[1]
   gradr=np.nan*np.zeros((Nz,Nr),dtype=float)
   gradz=np.nan*np.zeros((Nz,Nr),dtype=float)
-  gradphi=np.nan*np.zeros((Nz,Nr),dtype=float)
+  gradphi=np.zeros((Nz,Nr),dtype=float)#assuming axisymmetry
   for i in range(1,Nz-1):
-    for j in range(1,Nr-1):
-      gradr[i,j]=(fld[i,j+1]-fld[i,j-1])/2/dr
-      gradz[i,j]=(fld[i+1,j]-fld[i-1,j])/2/dz
-      gradphi[i,j]=0.0 #assuming axisymmetry
+    gradz[i,:]=(fld[i+1,:]-fld[i-1,:])/2/dz
+  for j in range(1,Nr-1):
+    gradr[:,j]=(fld[:,j+1]-fld[:,j-1])/2/dr
+
   return gradr,gradz,gradphi
 
 def Curl(r,z,fldr,fldz,fldphi,Nr,Nz):
@@ -90,10 +90,11 @@ def Curl(r,z,fldr,fldz,fldphi,Nr,Nz):
   curlz=np.nan*np.zeros((Nz,Nr),dtype=float)
   curlphi=np.nan*np.zeros((Nz,Nr),dtype=float)
   for i in range(1,Nz-1):
-    for j in range(1,Nr-1):
-      curlr[i,j]=-(fldphi[i+1,j]-fldphi[i-1,j])/2/dz
-      curlphi[i,j]=(fldr[i+1,j]-fldr[i-1,j])/2/dz-(fldz[i,j+1]-fldz[i,j-1])/2/dr
-      curlz[i,j]=(r[j+1]*fldphi[i,j+1]-r[j-1]*fldphi[i,j-1])/2/dr/r[j]
+    curlr[i,:]=-(fldphi[i+1,:]-fldphi[i-1,:])/2/dz
+    curlphi[i,:]=(fldr[i+1,:]-fldr[i-1,:])/2/dz
+  for j in range(1,Nr-1):
+    curlz[:,j]=(r[j+1]*fldphi[:,j+1]-r[j-1]*fldphi[:,j-1])/2/dr/r[j]
+    curlphi[:,j]=curlphi[:,j]-(fldz[:,j+1]-fldz[:,j-1])/2/dr
   return curlr,curlz,curlphi
 
 def Bfield(rz,rlin,zlin):
