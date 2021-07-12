@@ -91,6 +91,7 @@ dt_orb_out_orb=np.zeros((mynorb,),dtype=float)
 if determine_loss: loss_orb=np.zeros((mynorb,),dtype=int)
 tau_orb=np.zeros((mynorb,),dtype=float)
 t_beg_tot=time.time()
+pctg=0.01
 for iorb in range(iorb1,iorb2+1):
   imu=int(iorb/(nPphi*nH))
   iPphi=int((iorb-imu*nPphi*nH)/nH)
@@ -98,7 +99,6 @@ for iorb in range(iorb1,iorb2+1):
   mu=mu_arr[imu]
   Pphi=Pphi_arr[iPphi]
   r,z=r_beg[imu,iPphi,iH],z_beg[imu,iPphi,iH]
-  t_beg=time.time()
   if iorb==iorb1:
     calc_gyroE=True
     mu_old=mu
@@ -113,8 +113,10 @@ for iorb in range(iorb1,iorb2+1):
   else:
     lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,qi,mi,r,z,\
         r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,dt_xgc,nt,nsteps,max_step)
-  t_end=time.time()
-  print('rank=',rank,', orb=',iorb,', cpu time=',t_end-t_beg,'s',flush=True)
+  if (float(iorb-iorb1)/float(mynorb))>pctg:
+    t_end=time.time()
+    print('rank=',rank,'finished',int(pctg*100),'% in ',t_end-t_beg_tot,'s',flush=True)
+    pctg=pctg+0.01
   r_orb[iorb-iorb1,:]=r_orb1
   z_orb[iorb-iorb1,:]=z_orb1
   vp_orb[iorb-iorb1,:]=vp_orb1
@@ -124,7 +126,8 @@ for iorb in range(iorb1,iorb2+1):
   tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
 comm.barrier()
-print('rank=',rank,'total cpu time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
+time.sleep(rank*0.001)
+print('rank=',rank,'total time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
 #output which orbits are lost
 if determine_loss:
   if rank==0:
