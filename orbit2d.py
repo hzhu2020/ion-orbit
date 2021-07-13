@@ -3,12 +3,13 @@ import myinterp
 import numpy as np
 import math
 import os
-from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss
+from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss,\
+     qi,mi,nmu,nPphi,nH,nt,max_step,dt_xgc,nsteps
 
-def tau_orb(calc_gyroE,iorb,qi,mi,r_beg,z_beg,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max_step):
+def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi):
   global myEr00,myEz00,myEr0m,myEz0m
-  if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(iorb)
-  
+  if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(int(iorb/(nPphi*nH)))
+
   dt_orb=dt_xgc/float(nsteps)
   dt_orb_out=0.0
   r=r_beg
@@ -212,262 +213,273 @@ def rhs(qi,mi,r,z,mu,vp):
     dzdt=dzdt/D
     return drdt,dzdt,dvpdt
 
-def tau_orb_gpu(calc_gyroE,iorb,qi,mi,r_beg,z_beg,r_end,z_end,mu,Pphi,dt_xgc,nt,nsteps,max_step):
+def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
   import cupy as cp
-  orbit=cp.ElementwiseKernel(
-  'float64 r_beg, float64 z_beg, float64 qi, float64 mi, float64 mu, int64 max_step, int64 nsteps, int64 nt,\
-   raw float64 Br, raw float64 Bz, raw float64 Bphi, raw float64 gradBr, raw float64 gradBz,\
-   raw float64 curlbr, raw float64 curlbz, raw float64 curlbphi, raw float64 Er00, raw float64 Ez00,\
-   raw float64 Er0m, raw float64 Ez0m, raw float64 rlin, raw float64 zlin, float64 dt_orb,\
-   raw float64 psi2d, raw float64 theta, float64 ra, float64 za, raw float64 dist,float64 psi_surf,\
-   float64 r_end, float64 z_end, float64 cross_psitol, float64 cross_rztol, float64 cross_disttol,\
-   bool determine_loss, float64 psix, float64 zx',
-  'int64 num_cross, int64 step_count, bool lost, float64 vp, raw float64 r_orb1, raw float64 z_orb1,\
-   raw float64 vp_orb1, float64 tau, float64 dt_orb_out',
-  '''
-  int it,it2,irk,iz,ir,Nr,Nz,Nsurf,itheta,t_ind;
-  double r,z,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte;
-  double dr,dz,dtheta,r0,z0,wr,wz,wtheta,wt,Er,Ez,Bmag,br,bz,bphi,rhop,D;
-  double psi,theta_l,dist_l,dist_surf;
-  double Br_l,Bz_l,Bphi_l,Er00_l,Ez00_l,Er0m_l,Ez0m_l,gradBr_l,gradBz_l,curlbr_l,curlbphi_l,curlbz_l;
-  double *r_tmp,*z_tmp,*vp_tmp;
-  r=r_beg;
-  z=z_beg;
-  r_tmp=new double[max_step];
-  z_tmp=new double[max_step];
-  vp_tmp=new double[max_step];
-  r0=rlin[0];
-  z0=zlin[0];
-  dr=rlin[1]-rlin[0];
-  dz=zlin[1]-zlin[0];
-  Nr=rlin.size();
-  Nz=zlin.size();
-  Nsurf=theta.size();
-  dtheta=theta[1]-theta[0];
-  num_cross=0;
-  step_count=0;
-  lost=false;
-  tau=0.;
-  for (it=0;it<nt;it++){
-    r_orb1[it]=0.;
-    z_orb1[it]=0.;
-    vp_orb1[it]=0.;
-  }
-  for (it=0;it<max_step;it++){
-    r_tmp[it]=0.;
-    z_tmp[it]=0.;
-    vp_tmp[it]=0.;
-  }
-  for (it=0;it<max_step;it++){
-    if (isnan(r+z)){
-      if (num_cross==1) lost=true;
-      break;
-    }
-    if (it==nsteps*step_count){
-      if ((step_count<nt)&&(num_cross==0)){
-        r_orb1[step_count]=r;
-        z_orb1[step_count]=z;
-        vp_orb1[step_count]=vp;
-      }
-      if (num_cross==0) step_count=step_count+1;
-    }
-    r_tmp[it]=r;
-    z_tmp[it]=z;
-    vp_tmp[it]=vp;
-    rc=r;
-    zc=z;
-    vpc=vp;
-    for (irk=1;irk<=4;irk++){
-      ir=floor((rc-r0)/dr);
-      iz=floor((zc-z0)/dz);
-      wr=(rc-r0)/dr-ir;
-      wz=(zc-z0)/dz-iz;
-      if ((ir<0)||(ir>Nr-2)||(iz<0)||(iz>Nz-2)){
-        drdtc=nan("");
-        dzdtc=nan("");
-        dvpdtc=nan("");
-      }
-      else{
-        Br_l=Br[iz*Nz+ir]*(1-wz)*(1-wr)+Br[(iz+1)*Nz+ir]*wz*(1-wr)\
-            +Br[iz*Nz+ir+1]*(1-wz)*wr+Br[(iz+1)*Nz+ir+1]*wz*wr;
-        Bz_l=Bz[iz*Nz+ir]*(1-wz)*(1-wr)+Bz[(iz+1)*Nz+ir]*wz*(1-wr)\
-            +Bz[iz*Nz+ir+1]*(1-wz)*wr+Bz[(iz+1)*Nz+ir+1]*wz*wr;
-        Bphi_l=Bphi[iz*Nz+ir]*(1-wz)*(1-wr)+Bphi[(iz+1)*Nz+ir]*wz*(1-wr)\
-              +Bphi[iz*Nz+ir+1]*(1-wz)*wr+Bphi[(iz+1)*Nz+ir+1]*wz*wr;
-        gradBr_l=gradBr[iz*Nz+ir]*(1-wz)*(1-wr)+gradBr[(iz+1)*Nz+ir]*wz*(1-wr)\
-                +gradBr[iz*Nz+ir+1]*(1-wz)*wr+gradBr[(iz+1)*Nz+ir+1]*wz*wr;
-        gradBz_l=gradBz[iz*Nz+ir]*(1-wz)*(1-wr)+gradBz[(iz+1)*Nz+ir]*wz*(1-wr)\
-                +gradBz[iz*Nz+ir+1]*(1-wz)*wr+gradBz[(iz+1)*Nz+ir+1]*wz*wr;
-        curlbr_l=curlbr[iz*Nz+ir]*(1-wz)*(1-wr)+curlbr[(iz+1)*Nz+ir]*wz*(1-wr)\
-                +curlbr[iz*Nz+ir+1]*(1-wz)*wr+curlbr[(iz+1)*Nz+ir+1]*wz*wr;
-        curlbz_l=curlbz[iz*Nz+ir]*(1-wz)*(1-wr)+curlbz[(iz+1)*Nz+ir]*wz*(1-wr)\
-                +curlbz[iz*Nz+ir+1]*(1-wz)*wr+curlbz[(iz+1)*Nz+ir+1]*wz*wr;
-        curlbphi_l=curlbphi[iz*Nz+ir]*(1-wz)*(1-wr)+curlbphi[(iz+1)*Nz+ir]*wz*(1-wr)\
-                  +curlbphi[iz*Nz+ir+1]*(1-wz)*wr+curlbphi[(iz+1)*Nz+ir+1]*wz*wr;
-        Er00_l=Er00[iz*Nz+ir]*(1-wz)*(1-wr)+Er00[(iz+1)*Nz+ir]*wz*(1-wr)\
-            +Er00[iz*Nz+ir+1]*(1-wz)*wr+Er00[(iz+1)*Nz+ir+1]*wz*wr;
-        Ez00_l=Ez00[iz*Nz+ir]*(1-wz)*(1-wr)+Ez00[(iz+1)*Nz+ir]*wz*(1-wr)\
-            +Ez00[iz*Nz+ir+1]*(1-wz)*wr+Ez00[(iz+1)*Nz+ir+1]*wz*wr;
-        Er0m_l=Er0m[iz*Nz+ir]*(1-wz)*(1-wr)+Er0m[(iz+1)*Nz+ir]*wz*(1-wr)\
-            +Er0m[iz*Nz+ir+1]*(1-wz)*wr+Er0m[(iz+1)*Nz+ir+1]*wz*wr;
-        Ez0m_l=Ez0m[iz*Nz+ir]*(1-wz)*(1-wr)+Ez0m[(iz+1)*Nz+ir]*wz*(1-wr)\
-            +Ez0m[iz*Nz+ir+1]*(1-wz)*wr+Ez0m[(iz+1)*Nz+ir+1]*wz*wr;
-        Bmag=sqrt(Br_l*Br_l+Bz_l*Bz_l+Bphi_l*Bphi_l);
-        br=Br_l/Bmag;
-        bphi=Bphi_l/Bmag;
-        bz=Bz_l/Bmag;
-        Er=Er00_l+Er0m_l;
-        Ez=Ez00_l+Ez0m_l;
-        rhop=mi*vpc/qi/Bmag;
-        D=1.+rhop*(br*curlbr_l+bz*curlbz_l+bphi*curlbphi_l);
-        dvpdtc=mu*(br*gradBr_l+bz*gradBz_l)+rhop*mu*(curlbr_l*gradBr_l+curlbz_l*gradBz_l)\
-              -qi*rhop*(curlbr_l*Er+curlbz_l*Ez)-qi*(br*Er0m_l+bz*Ez0m_l);
-        dvpdtc=dvpdtc/(-mi*D);
-        drdtc=vpc*br+vpc*rhop*curlbr_l+Bphi_l*(mu*gradBz_l-qi*Ez)/qi/Bmag/Bmag;
-        drdtc=drdtc/D;
-        dzdtc=vpc*bz+vpc*rhop*curlbz_l-Bphi_l*(mu*gradBr_l-qi*Er)/qi/Bmag/Bmag;
-        dzdtc=dzdtc/D;
-      }
-      switch(irk){
-        case 1:
-          dvpdte=dvpdtc/6.;
-          drdte=drdtc/6.;
-          dzdte=dzdtc/6.;
-          vpc=vp+dvpdtc*dt_orb/2.;
-          rc=r+drdtc*dt_orb/2.;
-          zc=z+dzdtc*dt_orb/2.;
-          break;
-        case 2:
-          dvpdte=dvpdte+dvpdtc/3.;
-          drdte=drdte+drdtc/3.;
-          dzdte=dzdte+dzdtc/3.;
-          rc=r+drdtc*dt_orb/2.;
-          zc=z+dzdtc*dt_orb/2.;
-          break;
-        case 3:
-          dvpdte=dvpdte+dvpdtc/3.;
-          drdte=drdte+drdtc/3.;
-          dzdte=dzdte+dzdtc/3.;
-          rc=r+drdtc*dt_orb;
-          zc=z+dzdtc*dt_orb;
-          break;
-        case 4:
-          dvpdte=dvpdte+dvpdtc/6.;
-          drdte=drdte+drdtc/6.;
-          dzdte=dzdte+dzdtc/6.;
-          vp=vp+dvpdte*dt_orb;
-          r=r+drdte*dt_orb;
-          z=z+dzdte*dt_orb;
-          break;
-      }
-      if (isnan(rc+zc)||isnan(r+z)){
-        if (num_cross==1) lost=true;
-        break;
-      }
-    }//end of rk4 loop
-    if (isnan(rc+zc)||isnan(r+z)){
-      if (num_cross==1) lost=true;
-      break;
-    }
-    tau=tau+dt_orb;
-    ir=floor((r-r0)/dr);
-    iz=floor((z-z0)/dz);
-    wr=(r-r0)/dr-ir;
-    wz=(z-z0)/dz-iz;
-    if ((ir<0)||(ir>Nr-2)||(iz<0)||(iz>Nz-2)) break;
-    psi=psi2d[iz*Nz+ir]*(1-wz)*(1-wr)+psi2d[(iz+1)*Nz+ir]*wz*(1-wr)\
-       +psi2d[iz*Nz+ir+1]*(1-wz)*wr+psi2d[(iz+1)*Nz+ir+1]*wz*wr;
-    theta_l=atan2(z-za,r-ra);
-    if (theta_l<=theta[0]) theta_l+=8*atan(1.);
-    dist_l=sqrt((r-ra)*(r-ra)+(z-za)*(z-za));
-    if (theta_l>=theta[Nsurf-1]){
-      wtheta=(theta_l-theta[Nsurf-1])/(theta[0]+8*atan(1.)-theta[Nsurf-1]);
-      dist_surf=dist[Nsurf-1]*(1-wtheta)+dist[0]*wtheta;
+  orbit_kernel=cp.RawKernel(r'''
+  extern "C" __device__
+  double TwoD(double* f2d,double xin,double yin,double dx,double dy,double x0,double y0,int Nx,int Ny)
+  {
+    int ix,iy;
+    double wx,wy,fout;
+    ix=floor((xin-x0)/dx);
+    wx=(xin-x0)/dx-ix;
+    iy=floor((yin-y0)/dy);
+    wy=(yin-y0)/dy-iy;
+    if ((ix<0)|| (ix>Nx-2)||(iy<0)||(iy>Ny-2)){
+      fout=nan("");
     }
     else{
-      itheta=floor((theta_l-theta[0])/dtheta);
-      itheta=min(itheta,Nsurf-1);
-      while (theta_l<theta[itheta]) itheta=itheta-1;
-      while (theta_l>theta[itheta]) itheta=itheta+1;
-      wtheta=(theta_l-theta[itheta])/(theta[itheta+1]-theta[itheta]);
-      dist_surf=dist[itheta]*(1-wtheta)+dist[itheta+1]*wtheta;
+      fout=f2d[iy*Nx+ix]*(1-wy)*(1-wx)+f2d[(iy+1)*Nx+ix]*wy*(1-wx)\
+          +f2d[iy*Nx+ix+1]*(1-wy)*wx+f2d[(iy+1)*Nx+ix+1]*wy*wx;
     }
-    if((num_cross==0)&&(\
-      (psi>(1+cross_psitol)*psi_surf)||\
-      (sqrt((r-r_end)*(r-r_end)+(z-z_end)*(z-z_end))<cross_rztol)||\
-      (dist_l>dist_surf*(1+cross_disttol))\
-     )){
-       num_cross=1;
-       if (step_count<=nt){
-         dt_orb_out=dt_orb*double(nsteps);
-       }
-       else{
-         dt_orb_out=tau/double(nt);
-         step_count=nt;
-         for (it2=0;it2<nt;it2++){
-           t_ind=floor(double(it2)*dt_orb_out/dt_orb);
-           wt=double(it2)*dt_orb_out/dt_orb-t_ind;
-           if (t_ind==(max_step-1)){
-             t_ind=t_ind-1;
-             wt=1.0;
-           }
-           if (abs(r_tmp[t_ind+1])<1E-3) wt=0.0;
-           r_orb1[it2]=(1-wt)*r_tmp[t_ind]+wt*r_tmp[t_ind+1];
-           z_orb1[it2]=(1-wt)*z_tmp[t_ind]+wt*z_tmp[t_ind+1];
-           vp_orb1[it2]=(1-wt)*vp_tmp[t_ind]+wt*vp_tmp[t_ind+1];
-         }//for it2
-       }//if step_count<=nt
-       if (! determine_loss) break;
-    }//if cross
-    if((num_cross==1)&&\
-      (psi<(1-cross_psitol)*psix)&&\
-      (z<zx)){
-        lost=true;
-        break;
+    return fout;
+  }
+  extern "C" __device__
+  void rhs(double qi,double mi,double r,double z,double mu,double vp,double* rhs_l,double* Br,double* Bz,\
+       double* Bphi,double* Er00,double* Ez00,double* Er0m,double* Ez0m,double* gradBr,double* gradBz,\
+       double* curlbr,double* curlbz,double* curlbphi,double r0,double z0,double dr,\
+       double dz,int Nr,int Nz)
+  { 
+    double Br_l,Bz_l,Bphi_l,br_l,bz_l,bphi_l,Er00_l,Ez00_l,Er0m_l,Ez0m_l,Bmag,Er_l,Ez_l;
+    double gradBr_l,gradBz_l,curlbr_l,curlbz_l,curlbphi_l,rhop,D,drdt,dzdt,dvpdt;
+    Br_l=TwoD(Br,r,z,dr,dz,r0,z0,Nr,Nz);
+    if (isnan(Br_l)){
+      rhs_l[0]=nan("");
+      rhs_l[1]=nan("");
+      rhs_l[2]=nan("");
+      return;
+    }
+    Bz_l=TwoD(Bz,r,z,dr,dz,r0,z0,Nr,Nz);
+    Bphi_l=TwoD(Bphi,r,z,dr,dz,r0,z0,Nr,Nz);
+    Bmag=sqrt(Br_l*Br_l+Bz_l*Bz_l+Bphi_l*Bphi_l);
+    br_l=Br_l/Bmag;
+    bz_l=Bz_l/Bmag;
+    bphi_l=Bphi_l/Bmag;
+    Er00_l=TwoD(Er00,r,z,dr,dz,r0,z0,Nr,Nz);
+    Er0m_l=TwoD(Er0m,r,z,dr,dz,r0,z0,Nr,Nz);
+    Ez00_l=TwoD(Ez00,r,z,dr,dz,r0,z0,Nr,Nz);
+    Ez0m_l=TwoD(Ez0m,r,z,dr,dz,r0,z0,Nr,Nz);
+    Er_l=Er00_l+Er0m_l;
+    Ez_l=Ez00_l+Ez0m_l;
+    gradBr_l=TwoD(gradBr,r,z,dr,dz,r0,z0,Nr,Nz);
+    gradBz_l=TwoD(gradBz,r,z,dr,dz,r0,z0,Nr,Nz);
+    curlbr_l=TwoD(curlbr,r,z,dr,dz,r0,z0,Nr,Nz);
+    curlbz_l=TwoD(curlbz,r,z,dr,dz,r0,z0,Nr,Nz);
+    curlbphi_l=TwoD(curlbphi,r,z,dr,dz,r0,z0,Nr,Nz);
+    rhop=mi*vp/qi/Bmag;
+    D=1.+rhop*(br_l*curlbr_l+bz_l*curlbz_l+bphi_l*curlbphi_l);
+    dvpdt=mu*(br_l*gradBr_l+bz_l*gradBz_l)+rhop*mu*(curlbr_l*gradBr_l+curlbz_l*gradBz_l)\
+          -qi*rhop*(curlbr_l*Er_l+curlbz_l*Ez_l)-qi*(br_l*Er0m_l+bz_l*Ez0m_l);
+    dvpdt=dvpdt/(-mi*D);
+    drdt=vp*br_l+vp*rhop*curlbr_l+Bphi_l*(mu*gradBz_l-qi*Ez_l)/qi/Bmag/Bmag;
+    drdt=drdt/D;
+    dzdt=vp*bz_l+vp*rhop*curlbz_l-Bphi_l*(mu*gradBr_l-qi*Er_l)/qi/Bmag/Bmag;
+    dzdt=dzdt/D;
+    rhs_l[0]=drdt;
+    rhs_l[1]=dzdt;
+    rhs_l[2]=dvpdt;
+  }
+  extern "C" __global__
+  void orbit(int mynorb,int nblocks_max,double* r_orb1,double* z_orb1,double* vp_orb1,int* steps_orb,\
+    double* dt_orb_out_orb,int* loss_orb,double* tau_orb,double* r_tmp,double* z_tmp,double* vp_tmp,\
+    double* r_beg,double* z_beg,double* r_end,double* z_end,double* rlin,double* zlin,int Nr,int Nz,\
+    int max_step,int nsteps,double* theta,double psi_surf,double qi,double mi,double mu,double dt_orb,\
+    int Nsurf,int nt,double* Bmag,double* Br,double* Bz,double* Bphi,double* Er00,double* Ez00,\
+    double* Er0m,double* Ez0m,double* gradBr,double* gradBz,double* curlbr,double* curlbz,double* curlbphi,\
+    double* Pphi_arr,double* psi2d,double* dist,double psix,double zx,double ra,double za,double cross_psitol,\
+    double cross_rztol,double cross_disttol,bool determine_loss)
+  {
+    int iorb,num_cross,step_count,itheta,t_ind;
+    double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
+    double theta_l,dtheta,wtheta,wt,tau,Bmag_l,Bphi_l,psi,dist_l,dist_surf;
+    bool lost;
+    r0=rlin[0];
+    z0=zlin[0];
+    dr=rlin[1]-rlin[0];
+    dz=zlin[1]-zlin[0];
+    dtheta=theta[1]-theta[0];
+    iorb=blockIdx.x;
+    while(iorb<mynorb)
+    {
+      r=r_beg[iorb];
+      z=z_beg[iorb];
+      for (int it=0;it<nt;it++){
+        r_orb1[iorb*nt+it]=0.;
+        z_orb1[iorb*nt+it]=0.;
+        vp_orb1[iorb*nt+it]=0.;
       }
-    if((num_cross==1)&&(\
-      (psi<(1-cross_psitol)*psi_surf)||\
-      (sqrt((r-r_beg)*(r-r_beg)+(z-z_beg)*(z-z_beg))<cross_rztol)||\
-      (dist_l<dist_surf*(1-cross_disttol))\
-     )){
-       num_cross=2;
-       lost=false;
-       break;
-     }
-  }//end of step loop
-  if (step_count>nt) step_count=1;
-  delete [] r_tmp;
-  delete [] z_tmp;
-  delete [] vp_tmp;
-  ''',
-  'orbit')
-  global myEr00,myEz00,myEr0m,myEz0m
-  if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(iorb)
-  
+      for (int it=0;it<max_step;it++){
+        r_tmp[iorb*max_step+it]=0.;
+        z_tmp[iorb*max_step+it]=0.;
+        vp_tmp[iorb*max_step+it]=0.;
+      }
+      num_cross=0;
+      step_count=0;
+      lost=false;
+      tau=0.;
+      Bmag_l=TwoD(Bmag,r,z,dr,dz,r0,z0,Nr,Nz);
+      Bphi_l=TwoD(Bphi,r,z,dr,dz,r0,z0,Nr,Nz);
+      vp=(Pphi_arr[iorb]-qi*psi_surf)/mi/r/Bphi_l*Bmag_l;
+      for (int it=0;it<max_step;it++){
+        if (isnan(r+z)){
+         if (num_cross==1) lost=true;
+         break;
+        }
+        if (it==nsteps*step_count){
+          if ((step_count<nt)&&(num_cross==0)){
+          r_orb1[iorb*nt+step_count]=r;
+          z_orb1[iorb*nt+step_count]=z;
+          vp_orb1[iorb*nt+step_count]=vp;
+          }
+          if (num_cross==0) step_count=step_count+1;
+        }
+        r_tmp[iorb*max_step+it]=r;
+        z_tmp[iorb*max_step+it]=z;
+        vp_tmp[iorb*max_step+it]=vp;
+        rc=r;
+        zc=z;
+        vpc=vp;
+        //RK4 1st step
+        rhs(qi,mi,r,z,mu,vp,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
+            curlbr,curlbz,curlbphi,r0,z0,dr,dz,Nr,Nz);
+        drdtc=rhs_l[0];dzdtc=rhs_l[1];dvpdtc=rhs_l[2];
+        dvpdte=dvpdtc/6.;
+        drdte=drdtc/6.;
+        dzdte=dzdtc/6.;
+        vpc=vp+dvpdtc*dt_orb/2.;
+        rc=r+drdtc*dt_orb/2.;
+        zc=z+dzdtc*dt_orb/2.;
+        if (isnan(rc+zc)){
+          if (num_cross==1) lost=true;
+          break;
+        }
+        //RK4 2nd step
+        rhs(qi,mi,rc,zc,mu,vpc,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
+            curlbr,curlbz,curlbphi,r0,z0,dr,dz,Nr,Nz);
+        drdtc=rhs_l[0];dzdtc=rhs_l[1];dvpdtc=rhs_l[2];
+        dvpdte=dvpdte+dvpdtc/3.;
+        drdte=drdte+drdtc/3.;
+        dzdte=dzdte+dzdtc/3.;
+        rc=r+drdtc*dt_orb/2.;
+        zc=z+dzdtc*dt_orb/2.;
+        if (isnan(rc+zc)){
+          if (num_cross==1) lost=true;
+          break;
+        }
+        //RK4 3nd step
+        rhs(qi,mi,rc,zc,mu,vpc,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
+            curlbr,curlbz,curlbphi,r0,z0,dr,dz,Nr,Nz);
+        drdtc=rhs_l[0];dzdtc=rhs_l[1];dvpdtc=rhs_l[2];
+        dvpdte=dvpdte+dvpdtc/3.;
+        drdte=drdte+drdtc/3.;
+        dzdte=dzdte+dzdtc/3.;
+        rc=r+drdtc*dt_orb;
+        zc=z+dzdtc*dt_orb;
+        if (isnan(rc+zc)){ 
+          if (num_cross==1) lost=true;
+          break;
+        }
+        //Rk4 4th step
+        rhs(qi,mi,rc,zc,mu,vpc,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
+            curlbr,curlbz,curlbphi,r0,z0,dr,dz,Nr,Nz);
+        drdtc=rhs_l[0];dzdtc=rhs_l[1];dvpdtc=rhs_l[2];
+        dvpdte=dvpdte+dvpdtc/6.;
+        drdte=drdte+drdtc/6.;
+        dzdte=dzdte+dzdtc/6.;
+        vp=vp+dvpdte*dt_orb;
+        r=r+drdte*dt_orb;
+        z=z+dzdte*dt_orb;
+        if (isnan(r+z)){ 
+          if (num_cross==1) lost=true;
+          break;
+        } 
+        tau=tau+dt_orb;
+        psi=TwoD(psi2d,r,z,dr,dz,r0,z0,Nr,Nz);
+        theta_l=atan2(z-za,r-ra);
+        if (theta_l<=theta[0]) theta_l+=8*atan(1.);
+        dist_l=sqrt((r-ra)*(r-ra)+(z-za)*(z-za));
+        if (theta_l>=theta[Nsurf-1]){
+          wtheta=(theta_l-theta[Nsurf-1])/(theta[0]+8*atan(1.)-theta[Nsurf-1]);
+          dist_surf=dist[Nsurf-1]*(1-wtheta)+dist[0]*wtheta;
+        }
+        else{
+          itheta=floor((theta_l-theta[0])/dtheta);
+          itheta=min(itheta,Nsurf-1);
+          while (theta_l<theta[itheta]) itheta=itheta-1;
+          while (theta_l>theta[itheta]) itheta=itheta+1;
+          wtheta=(theta_l-theta[itheta])/(theta[itheta+1]-theta[itheta]);
+          dist_surf=dist[itheta]*(1-wtheta)+dist[itheta+1]*wtheta;
+        }
+        if((num_cross==0)&&(\
+          (psi>(1+cross_psitol)*psi_surf)||\
+          (sqrt((r-r_end[iorb])*(r-r_end[iorb])+(z-z_end[iorb])*(z-z_end[iorb]))<cross_rztol)||\
+          (dist_l>dist_surf*(1+cross_disttol))\
+         )){
+           num_cross=1;
+           if (step_count<=nt){
+             dt_orb_out_orb[iorb]=dt_orb*double(nsteps);
+           }
+           else{
+             dt_orb_out_orb[iorb]=tau/double(nt);
+             step_count=nt;
+             for (int it2=0;it2<nt;it2++){
+               t_ind=floor(double(it2)*dt_orb_out_orb[iorb]/dt_orb);
+               wt=double(it2)*dt_orb_out_orb[iorb]/dt_orb-t_ind;
+               if (t_ind==(max_step-1)){
+                 t_ind=t_ind-1;
+                 wt=1.0;
+               }
+               if (abs(r_tmp[iorb*max_step+t_ind+1])<1E-3) wt=0.0;
+               r_orb1[iorb*nt+it2]=(1-wt)*r_tmp[iorb*max_step+t_ind]+wt*r_tmp[iorb*max_step+t_ind+1];
+               z_orb1[iorb*nt+it2]=(1-wt)*z_tmp[iorb*max_step+t_ind]+wt*z_tmp[iorb*max_step+t_ind+1];
+               vp_orb1[iorb*nt+it2]=(1-wt)*vp_tmp[iorb*max_step+t_ind]+wt*vp_tmp[iorb*max_step+t_ind+1];
+             }//for it2
+           }//if step_count<=nt
+           if (! determine_loss) break;
+        }//if cross
+       if((num_cross==1)&&(psi<(1-cross_psitol)*psix)&&(z<zx)){
+          lost=true;
+          break;
+         }
+       if((num_cross==1)&&(\
+         (psi<(1-cross_psitol)*psi_surf)||\
+         (sqrt((r-r_beg[iorb])*(r-r_beg[iorb])+(z-z_beg[iorb])*(z-z_beg[iorb]))<cross_rztol)||\
+         (dist_l<dist_surf*(1-cross_disttol))\
+       )){
+         num_cross=2;
+         lost=false;
+         break;
+      }
+      }//end for it
+      if (step_count>nt) step_count=1;
+      steps_orb[iorb]=step_count;
+      tau_orb[iorb]=tau;
+      loss_orb[iorb]=int(lost);
+      iorb=iorb+nblocks_max;
+    }
+  }
+  ''','orbit')
+  from parameters import gyro_E,Nz,Nr
+  r_beg=r_beg.ravel(order='C')
+  z_beg=z_beg.ravel(order='C')
+  r_end=r_end.ravel(order='C')
+  z_end=z_end.ravel(order='C')
+  nblocks_max=4096
+  mynorb=iorb2-iorb1+1
+  r_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
+  z_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
+  vp_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
+  steps_orb_gpu=cp.zeros((mynorb,),dtype=cp.int32)
+  dt_orb_out_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
+  loss_orb_gpu=cp.zeros((mynorb,),dtype=cp.int32)
+  tau_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
   dt_orb=dt_xgc/float(nsteps)
-  #prepare the axis position
-  ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
-  za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
-
-  ix,iy,wx,wy,Bmag=myinterp.TwoD(var.Bmag,r_beg,z_beg)
-  if np.isnan(Bmag):
-    print('Wrong initial orbit locations: iorb=',iorb,'r=',r_beg,'z=',z_beg)
-    exit()
-  Bphi=var.Bphi[iy,ix]*(1-wy)*(1-wx) + var.Bphi[iy+1,ix]*wy*(1-wx)\
-      +var.Bphi[iy,ix+1]*(1-wy)*wx + var.Bphi[iy+1,ix+1]*wy*wx
-  vp=(Pphi-qi*var.psi_surf)/mi/r_beg/Bphi*Bmag
-
-  r_beg_gpu=cp.asarray([r_beg],dtype=cp.float64)
-  z_beg_gpu=cp.asarray([z_beg],dtype=cp.float64)
-  vp_gpu=cp.asarray([vp],dtype=cp.float64)
-  r_orb1_gpu=cp.zeros((nt,),dtype=cp.float64)
-  z_orb1_gpu=cp.zeros((nt,),dtype=cp.float64)
-  vp_orb1_gpu=cp.zeros((nt,),dtype=cp.float64)
-  tau_gpu=cp.asarray([0.],dtype=cp.float64)
-  dt_orb_out_gpu=cp.asarray([0.],dtype=cp.float64)
-  step_count_gpu=cp.asarray([0],dtype=cp.int64)
-  num_cross_gpu=cp.asarray([0],dtype=cp.int64)
-  lost_gpu=cp.asarray([False],dtype=cp.bool_)
+  rlin_gpu=cp.asarray(var.rlin,dtype=cp.float64)
+  zlin_gpu=cp.asarray(var.zlin,dtype=cp.float64)
+  psi2d_gpu=cp.asarray(var.psi2d,dtype=cp.float64).ravel(order='C')
+  theta_gpu=cp.asarray(var.theta,dtype=cp.float64)
+  dist_gpu=cp.asarray(var.dist,dtype=cp.float64)
+  Bmag_gpu=cp.asarray(var.Bmag,dtype=cp.float64).ravel(order='C')
   Br_gpu=cp.asarray(var.Br,dtype=cp.float64).ravel(order='C')
   Bz_gpu=cp.asarray(var.Bz,dtype=cp.float64).ravel(order='C')
   Bphi_gpu=cp.asarray(var.Bphi,dtype=cp.float64).ravel(order='C')
@@ -476,29 +488,56 @@ def tau_orb_gpu(calc_gyroE,iorb,qi,mi,r_beg,z_beg,r_end,z_end,mu,Pphi,dt_xgc,nt,
   curlbr_gpu=cp.asarray(var.curlbr,dtype=cp.float64).ravel(order='C')
   curlbz_gpu=cp.asarray(var.curlbz,dtype=cp.float64).ravel(order='C')
   curlbphi_gpu=cp.asarray(var.curlbphi,dtype=cp.float64).ravel(order='C')
-  Er00_gpu=cp.asarray(myEr00,dtype=cp.float64).ravel(order='C')
-  Ez00_gpu=cp.asarray(myEz00,dtype=cp.float64).ravel(order='C')
-  Er0m_gpu=cp.asarray(myEr0m,dtype=cp.float64).ravel(order='C')
-  Ez0m_gpu=cp.asarray(myEz0m,dtype=cp.float64).ravel(order='C')
-  rlin_gpu=cp.asarray(var.rlin,dtype=cp.float64)
-  zlin_gpu=cp.asarray(var.zlin,dtype=cp.float64)
-  psi2d_gpu=cp.asarray(var.psi2d,dtype=cp.float64)
-  theta_gpu=cp.asarray(var.theta,dtype=cp.float64)
-  dist_gpu=cp.asarray(var.dist,dtype=cp.float64)
-  psix_gpu=cp.asarray(var.psix,dtype=cp.float64)
-  zx_gpu=cp.asarray(var.zx,dtype=cp.float64)
-
-  orbit(r_beg_gpu,z_beg_gpu,qi,mi,mu,max_step,nsteps,nt,Br_gpu,Bz_gpu,Bphi_gpu,gradBr_gpu,gradBz_gpu,\
-       curlbr_gpu,curlbz_gpu,curlbphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,rlin_gpu,zlin_gpu,\
-       dt_orb,psi2d_gpu,theta_gpu,ra,za,dist_gpu,var.psi_surf,r_end,z_end,cross_psitol,cross_rztol,\
-       cross_disttol,determine_loss,psix_gpu,zx_gpu,\
-       num_cross_gpu,step_count_gpu,lost_gpu,vp_gpu,r_orb1_gpu,z_orb1_gpu,vp_orb1_gpu,tau_gpu,dt_orb_out_gpu)
-  r_orb1=cp.asnumpy(r_orb1_gpu)
-  z_orb1=cp.asnumpy(z_orb1_gpu)
-  vp_orb1=cp.asnumpy(vp_orb1_gpu)
-  lost=cp.asnumpy(lost_gpu)
-  tau=cp.asnumpy(tau_gpu)
-  step_count=cp.asnumpy(step_count_gpu)
-  num_cross=cp.asnumpy(num_cross_gpu)
-  dt_orb_out=cp.asnumpy(dt_orb_out_gpu)
-  return lost,tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1
+  Nsurf=np.size(var.theta);
+  ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
+  za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
+  imu1=int(iorb1/(nPphi*nH))
+  imu2=int(iorb2/(nPphi*nH))
+  for imu in range(imu1,imu2+1):
+    iorb1_l=max(imu*nPphi*nH,iorb1)
+    iorb2_l=min((imu+1)*nPphi*nH-1,iorb2)
+    mynorb_l=iorb2_l-iorb1_l+1
+    idx1=iorb1_l-iorb1
+    idx2=iorb2_l+1-iorb1
+    nblocks=min(nblocks_max,mynorb_l)
+    myEr00,myEz00,myEr0m,myEz0m=var.efield(imu)
+    Er00_gpu=cp.asarray(myEr00,dtype=cp.float64).ravel(order='C')
+    Ez00_gpu=cp.asarray(myEz00,dtype=cp.float64).ravel(order='C')
+    Er0m_gpu=cp.asarray(myEr0m,dtype=cp.float64).ravel(order='C')
+    Ez0m_gpu=cp.asarray(myEz0m,dtype=cp.float64).ravel(order='C')
+    Pphi_arr_gpu=cp.zeros((mynorb_l,),dtype=cp.float64)
+    for iorb_l in range(iorb1_l,iorb2_l+1):
+      iPphi=int((iorb_l-imu*nPphi*nH)/nH);
+      Pphi_arr_gpu[iorb_l-iorb1_l]=Pphi_arr[iPphi]
+    r_beg_gpu=cp.asarray(r_beg[iorb1_l:iorb2_l+1],dtype=cp.float64)
+    z_beg_gpu=cp.asarray(z_beg[iorb1_l:iorb2_l+1],dtype=cp.float64)
+    r_end_gpu=cp.asarray(r_end[iorb1_l:iorb2_l+1],dtype=cp.float64)
+    z_end_gpu=cp.asarray(z_end[iorb1_l:iorb2_l+1],dtype=cp.float64)
+    r_tmp_gpu=cp.zeros((int(mynorb_l*max_step),),dtype=cp.float64,order='C')
+    z_tmp_gpu=cp.zeros((int(mynorb_l*max_step),),dtype=cp.float64,order='C')
+    vp_tmp_gpu=cp.zeros((int(mynorb_l*max_step),),dtype=cp.float64,order='C')
+    orbit_kernel((nblocks,),(1,),(int(mynorb_l),int(nblocks_max),r_orb_gpu[idx1*nt:idx2*nt],\
+            z_orb_gpu[idx1*nt:idx2*nt],vp_orb_gpu[idx1*nt:idx2*nt],steps_orb_gpu[idx1:idx2],\
+            dt_orb_out_orb_gpu[idx1:idx2],loss_orb_gpu[idx1:idx2],tau_orb_gpu[idx1:idx2],\
+            r_tmp_gpu,z_tmp_gpu,vp_tmp_gpu,r_beg_gpu,z_beg_gpu,r_end_gpu,z_end_gpu,rlin_gpu,zlin_gpu,\
+            int(Nr),int(Nz),int(max_step),int(nsteps),theta_gpu,var.psi_surf,qi,mi,mu_arr[imu],dt_orb,\
+            int(Nsurf),int(nt),Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,\
+            gradBr_gpu,gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu,Pphi_arr_gpu,psi2d_gpu,dist_gpu,\
+            float(var.psix),float(var.zx),ra,za,cross_psitol,cross_rztol,cross_disttol,determine_loss))
+    cp.cuda.Stream.null.synchronize()
+ 
+  r_orb=cp.asnumpy(r_orb_gpu).reshape((mynorb,nt),order='C')
+  z_orb=cp.asnumpy(z_orb_gpu).reshape((mynorb,nt),order='C')
+  vp_orb=cp.asnumpy(vp_orb_gpu).reshape((mynorb,nt),order='C')
+  steps_orb=cp.asnumpy(steps_orb_gpu)
+  dt_orb_out_orb=cp.asnumpy(dt_orb_out_orb_gpu)
+  loss_orb=cp.asnumpy(loss_orb_gpu)
+  tau_orb=cp.asnumpy(tau_orb_gpu)
+  #fot correct MPI communication if writing to orbit.txt
+  steps_orb=np.array(steps_orb,dtype=int)
+  loss_orb=np.array(loss_orb,dtype=int)
+  del r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu,\
+      rlin_gpu,zlin_gpu,psi2d_gpu,theta_gpu,dist_gpu,Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,gradBr_gpu,\
+      gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,Pphi_arr_gpu,\
+      r_beg_gpu,z_beg_gpu,r_end_gpu,z_end_gpu,r_tmp_gpu,z_tmp_gpu,vp_tmp_gpu
+  return loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb

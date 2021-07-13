@@ -94,7 +94,7 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
 
   return
 
-def gyropot_gpu(mu_arr,qi,mi,ngyro):
+def gyropot_gpu(comm,mu_arr,qi,mi,ngyro):
   import cupy as cp
   gyro_pot_kernel=cp.RawKernel(r'''
   extern "C" __global__
@@ -169,6 +169,7 @@ def gyropot_gpu(mu_arr,qi,mi,ngyro):
     gyropot0[:,:,imu]=cp.asnumpy(gyropot0_gpu).reshape((Nz,Nr),order='C')
     gyrodpot[:,:,imu]=cp.asnumpy(gyrodpot_gpu).reshape((Nz,Nr),order='C')
   
+  comm.barrier()#just to avoid accidental deletion before completion
   del Bmag_gpu,rlin_gpu,zlin_gpu,pot0_gpu,dpot_gpu,gyropot0_gpu,gyrodpot_gpu
   mempool = cp.get_default_memory_pool()
   pinned_mempool = cp.get_default_pinned_memory_pool()
@@ -244,13 +245,11 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
   gyrodpot=comm.allreduce(gyrodpot,op=summation)
   return
 
-def efield(iorb):
+def efield(imu):
   myEr00=Er00
   myEz00=Ez00
   Nz,Nr=np.shape(Er00)
   if gyro_E:
-    from parameters import nPphi,nH
-    imu=int(iorb/(nPphi*nH))
     #To avoid the dot product between b and the ungyroaveraged E00
     myEr0m,myEz0m,myEphi0m=setup.Grad(rlin,zlin,gyropot0[:,:,imu]+gyrodpot[:,:,imu],Nr,Nz)
     myEr0m=-myEr0m-Er00
