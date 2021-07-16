@@ -336,8 +336,6 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
         r_tmp[iorb*max_step+it]=r;
         z_tmp[iorb*max_step+it]=z;
         vp_tmp[iorb*max_step+it]=vp;
-        rc=r;
-        zc=z;
         vpc=vp;
         //RK4 1st step
         rhs(qi,mi,r,z,mu,vp,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
@@ -406,7 +404,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
           itheta=floor((theta_l-theta[0])/dtheta);
           itheta=min(itheta,Nsurf-1);
           while (theta_l<theta[itheta]) itheta=itheta-1;
-          while (theta_l>theta[itheta]) itheta=itheta+1;
+          while (theta_l>theta[itheta+1]) itheta=itheta+1;
           wtheta=(theta_l-theta[itheta])/(theta[itheta+1]-theta[itheta]);
           dist_surf=dist[itheta]*(1-wtheta)+dist[itheta+1]*wtheta;
         }
