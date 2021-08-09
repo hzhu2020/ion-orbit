@@ -117,7 +117,7 @@ else:
     if (float(iorb-iorb1)/float(mynorb))>pctg:
       t_end=time.time()
       print('rank=',rank,'finished',int(pctg*100),'% in ',t_end-t_beg_tot,'s',flush=True)
-      pctg=pctg+0.01
+      pctg=float(iorb-iorb1)/float(mynorb)+0.01
     r_orb[iorb-iorb1,:]=r_orb1
     z_orb[iorb-iorb1,:]=z_orb1
     vp_orb[iorb-iorb1,:]=vp_orb1
