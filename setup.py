@@ -1,4 +1,4 @@
-from parameters import adios_version,input_dir,pot_file,\
+from parameters import xgc,adios_version,input_dir,pot_file,\
                        surf_psin,surf_psitol,surf_rztol,interp_method
 if adios_version==1:
   import adios as ad
@@ -106,7 +106,12 @@ def Bfield(rz,rlin,zlin):
   elif adios_version==2:
     fname=input_dir+'/xgc.bfield.bp'
     f=ad.open(fname,'r')
-    B=f.read('bfield')
+    if xgc=='xgca':
+      B=f.read('bfield')
+    elif xgc=='xgc1':
+      B=f.read('/node_data[0]/values')
+    else:
+      print('Wrong parameter xgc.')
     f.close()
 
   R,Z=np.meshgrid(rlin,zlin)
@@ -124,7 +129,9 @@ def Pot(rz,rlin,zlin):
     pot0=f.read('pot0')
     dpot=f.read('dpot')
     f.close()
-    #dpot=np.mean(dpot,axis=1) #TODO need to add this for XGC1
+    if xgc=='xgc1':
+      print('xgc=xgc1, apply toroidal average to dpot.')
+      dpot=np.mean(dpot,axis=0)
     R,Z=np.meshgrid(rlin,zlin)
     pot02d=griddata(rz,pot0,(R,Z),method=interp_method)
     dpot2d=griddata(rz,dpot,(R,Z),method=interp_method)

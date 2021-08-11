@@ -16,6 +16,7 @@ pot0fac=1. #factor that reduces 00 E field
 dpotfac=1. #factor that reduces turb E field
 dpot_fourier_maxm=10 #maximum poloidal Fourier mode number for dpot
 #input directory containing adios bp files
+xgc='xgc1'#'xgc1' or 'xgca'
 input_dir='input_dir'
 adios_version=2
 pot_file='xgc.2d.03000.bp'

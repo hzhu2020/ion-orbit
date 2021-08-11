@@ -1,16 +1,21 @@
 import adios2 as ad
 import numpy as np
-xgc_dir='/path/to/XGCa'
+xgc='xgc1'#'xgc1' or 'xgca'
+xgc_dir='/path/to/XGC'
 #time indices for XGCa's 2d diagnostics
 step_start=2020
 step_end=4000
 dstep=20
 nsteps=(step_end-step_start)/dstep+1
 for gstep in range(step_start,step_end+dstep,dstep):
-  fname=xgc_dir+'/xgc.2d.'+'{:0>5d}'.format(gstep)+'.bp'
+  if xgc=='xgca':
+    fname=xgc_dir+'/xgc.2d.'+'{:0>5d}'.format(gstep)+'.bp'
+  elif xgc=='xgc1':
+    fname=xgc_dir+'/xgc.3d.'+'{:0>5d}'.format(gstep)+'.bp'
   fid=ad.open(fname,'r')
   pot0=fid.read('pot0')
   dpot=fid.read('dpot')
+  if xgc=='xgc1': dpot=np.mean(dpot,axis=0)
   fid.close()
   if gstep==step_start:
     nnodes=len(pot0)
