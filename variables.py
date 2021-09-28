@@ -81,9 +81,7 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
 
   pot0=np.zeros((Nz,Nr),dtype=float)
   dpot=np.zeros((Nz,Nr),dtype=float)
-  pot0[iz1:iz2+1,:],dpot[iz1:iz2+1,:]=setup.Pot(rz,rlin,zlin[iz1:iz2+1])
-  pot0=pot0fac*pot0
-  dpot=dpotfac*dpot
+  pot0[iz1:iz2+1,:],dpot[iz1:iz2+1,:]=setup.Pot(rz,rlin,zlin[iz1:iz2+1],pot0fac,dpotfac)
   pot0=comm.allreduce(pot0,op=summation)
   dpot=comm.allreduce(dpot,op=summation)
 

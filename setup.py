@@ -120,7 +120,7 @@ def Bfield(rz,rlin,zlin):
   Bphi=griddata(rz,B[:,2],(R,Z),method=interp_method)
   return Br,Bz,Bphi
 
-def Pot(rz,rlin,zlin):
+def Pot(rz,rlin,zlin,pot0fac,dpotfac):
   if adios_version==1:
     print('Not added yet.',flush=True)
   elif adios_version==2:
@@ -133,6 +133,12 @@ def Pot(rz,rlin,zlin):
       print('xgc=xgc1, apply toroidal average to dpot.')
       dpot=np.mean(dpot,axis=0)
     R,Z=np.meshgrid(rlin,zlin)
-    pot02d=griddata(rz,pot0,(R,Z),method=interp_method)
-    dpot2d=griddata(rz,dpot,(R,Z),method=interp_method)
-  return pot02d,dpot2d
+    if pot0fac>0:
+      pot02d=griddata(rz,pot0,(R,Z),method=interp_method)
+    else:
+      pot02d=np.zeros(np.shape(R),dtype=float)
+    if dpotfac>0:
+      dpot2d=griddata(rz,dpot,(R,Z),method=interp_method)
+    else:
+      dpot2d=np.zeros(np.shape(R),dtype=float)
+  return pot0fac*pot02d,dpotfac*dpot2d
