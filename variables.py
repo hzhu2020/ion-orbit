@@ -24,7 +24,9 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
 
   return ix,iy,wx,wy,fout
 
-def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
+def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
+  rank=comm.Get_rank()
+  size=comm.Get_size()
   #read mesh
   global rlin,zlin,R,Z,psi2d,psi_surf,psix,Ra,Ba,rsurf,zsurf,theta,dist,zx
   if rank==0:
@@ -37,18 +39,23 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   zmesh=rz[:,1]
   rlin=np.linspace(min(rmesh),max(rmesh),Nr)
   zlin=np.linspace(min(zmesh),max(zmesh),Nz)
+  iz1,iz2,iz_list=simple_partition(comm,Nz,size)
+  iz1=iz1[rank]
+  iz2=iz2[rank]
   R,Z=np.meshgrid(rlin,zlin)
-  psi2d=griddata(rz,psi_rz,(R,Z),method=interp_method)
+  psi2d=np.zeros((Nz,Nr),dtype=float)
+  psi2d[iz1:iz2+1,:]=griddata(rz,psi_rz,(R[iz1:iz2+1,:],Z[iz1:iz2+1,:]),method=interp_method)
+  psi2d=comm.allreduce(psi2d,op=summation)
   Ra=(min(rmesh)+max(rmesh))/2 #major radius
   #read B field
   global Bmag,Br,Bz,Bphi,br,bz,bphi
-  if rank==0:
-    Br,Bz,Bphi=setup.Bfield(rz,rlin,zlin)
-  else:
-    Br,Bz,Bphi=[None]*3
-  Br=comm.bcast(Br,root=0)
-  Bz=comm.bcast(Bz,root=0)
-  Bphi=comm.bcast(Bphi,root=0)
+  Br=np.zeros((Nz,Nr),dtype=float)
+  Bz=np.zeros((Nz,Nr),dtype=float)
+  Bphi=np.zeros((Nz,Nr),dtype=float)
+  Br[iz1:iz2+1,:],Bz[iz1:iz2+1,:],Bphi[iz1:iz2+1,:]=setup.Bfield(rz,rlin,zlin[iz1:iz2+1])
+  Br=comm.allreduce(Br,op=summation)
+  Bz=comm.allreduce(Bz,op=summation)
+  Bphi=comm.allreduce(Bphi,op=summation)
   Bmag=np.sqrt(Br**2+Bz**2+Bphi**2)
   br=Br/Bmag
   bz=Bz/Bmag
@@ -71,14 +78,14 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,rank):
   gradBr,gradBz,gradBphi=setup.Grad(rlin,zlin,Bmag,Nr,Nz)
   curlBr,curlBz,curlBphi=setup.Curl(rlin,zlin,Br,Bz,Bphi,Nr,Nz)
   curlbr,curlbz,curlbphi=setup.Curl(rlin,zlin,br,bz,bphi,Nr,Nz)
-  if rank==0:
-    pot0,dpot=setup.Pot(rz,rlin,zlin)
-    pot0=pot0fac*pot0
-    dpot=dpotfac*dpot
-  else:
-    pot0,dpot=[None]*2
-  pot0=comm.bcast(pot0,root=0)
-  dpot=comm.bcast(dpot,root=0)
+
+  pot0=np.zeros((Nz,Nr),dtype=float)
+  dpot=np.zeros((Nz,Nr),dtype=float)
+  pot0[iz1:iz2+1,:],dpot[iz1:iz2+1,:]=setup.Pot(rz,rlin,zlin[iz1:iz2+1])
+  pot0=pot0fac*pot0
+  dpot=dpotfac*dpot
+  pot0=comm.allreduce(pot0,op=summation)
+  dpot=comm.allreduce(dpot,op=summation)
 
   global Er00,Ez00,Ephi00
   Er00,Ez00,Ephi00=setup.Grad(rlin,zlin,pot0,Nr,Nz)
