@@ -184,21 +184,10 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
   rank=comm.Get_rank()
   size=comm.Get_size()
   #parition in (r,z,mu) just like the orbit partitioning
-  if rank==0:
-    ntasks=Nr*Nz*Nmu
-    ntasks_avg=int(ntasks/size)
-    ntasks_last=ntasks-ntasks_avg*(size-1)
-    ntasks_list=np.zeros((size,1),dtype=int)
-    ntasks_list[:]=ntasks_avg
-    if ntasks_last>ntasks_avg:
-      for irank in range(ntasks_last-ntasks_avg): ntasks_list[irank]=ntasks_list[irank]+1
-  else:
-    ntasks_list=None
+  itask1,itask2,ntasks_list=simple_partition(comm,Nr*Nz*Nmu,size)
+  itask1=itask1[rank]
+  itask2=itask2[rank]
 
-  ntasks_list=comm.bcast(ntasks_list,root=0)
-  myntasks=int(ntasks_list[rank])
-  itask1=int(sum(ntasks_list[0:rank]))
-  itask2=itask1+myntasks-1
   dr=rlin[1]-rlin[0]
   dz=zlin[1]-zlin[0]
   r0=rlin[0]
@@ -294,20 +283,9 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
   #partition tasks
   rank=comm.Get_rank()
   size=comm.Get_size()
-  if rank==0:
-    ntasks=nmu*nPphi
-    ntasks_avg=int(ntasks/size)
-    ntasks_last=ntasks-ntasks_avg*(size-1)
-    ntasks_list=np.zeros((size,1),dtype=int)
-    ntasks_list[:]=ntasks_avg
-    if ntasks_last>ntasks_avg:
-      for irank in range(ntasks_last-ntasks_avg): ntasks_list[irank]=ntasks_list[irank]+1
-  else:
-    ntasks_list=None
-  ntasks_list=comm.bcast(ntasks_list,root=0)
-  myntasks=int(ntasks_list[rank])
-  itask1=int(sum(ntasks_list[0:rank]))
-  itask2=itask1+myntasks-1
+  itask1,itask2,ntasks_list=simple_partition(comm,nmu*nPphi,size)
+  itask1=itask1[rank]
+  itask2=itask2[rank]
 
   dH=np.zeros((nmu,nPphi,nH),dtype=float)
   #crossing locations of the orbits with the LCFS
@@ -505,19 +483,27 @@ def partition_orbits(comm,partition_opt,nmu,nPphi,nH):
     mynorb=iorb2-iorb1+1
     norb_list=iorb2_list-iorb1_list+1
   else:#parition orbit based on orbit indices, will cause large load imbalance
-    if rank==0:
-      norb=nmu*nPphi*nH
-      norb_avg=int(norb/size)
-      norb_last=norb-norb_avg*(size-1)
-      norb_list=np.zeros((size,1),dtype=int)
-      norb_list[:]=norb_avg
-      if norb_last>norb_avg:
-        for irank in range(norb_last-norb_avg): norb_list[irank]=norb_list[irank]+1
-
-    else:
-      norb_list=None
-    norb_list=comm.bcast(norb_list,root=0)
-    mynorb=int(norb_list[rank])
-    iorb1=int(sum(norb_list[0:rank]))
-    iorb2=iorb1+mynorb-1
+    iorb1,iorb2,norb_list=simple_partition(comm,nmu*nPphi*nH,size)
+    iorb1=iorb1[rank]
+    iorb2=iorb2[rank] 
   return iorb1,iorb2,norb_list
+
+def simple_partition(comm,nsteps,nloops):
+  if comm.Get_rank()==0:
+    nsteps_avg=int(nsteps/nloops)
+    nsteps_last=nsteps-nsteps_avg*(nloops-1)
+    nsteps_list=np.zeros((nloops,),dtype=int)
+    nsteps_list[:]=nsteps_avg
+    if nsteps_last>nsteps_avg:
+      for iloop in range(nsteps_last-nsteps_avg): nsteps_list[iloop]=nsteps_list[iloop]+1
+    istep1=np.zeros((nloops,),dtype=int)
+    istep2=np.zeros((nloops,),dtype=int)
+    for iloop in range(nloops): istep1[iloop]=int(sum(nsteps_list[0:iloop]))
+    istep2=istep1+nsteps_list-1
+
+  else:
+    istep1,istep2,nsteps_list=[None]*3
+  istep1=comm.bcast(istep1,root=0)
+  istep2=comm.bcast(istep2,root=0)
+  nsteps_list=comm.bcast(nsteps_list,root=0)
+  return istep1,istep2,nsteps_list
