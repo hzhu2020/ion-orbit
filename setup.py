@@ -97,7 +97,7 @@ def Curl(r,z,fldr,fldz,fldphi,Nr,Nz):
     curlphi[:,j]=curlphi[:,j]-(fldz[:,j+1]-fldz[:,j-1])/2/dr
   return curlr,curlz,curlphi
 
-def Bfield(rz,rlin,zlin):
+def Bfield(rz,rlin,zlin,itask1,itask2):
   if adios_version==1:
     fname=input_dir+'/xgc.bfield.bp'
     f=ad.file(fname)
@@ -115,12 +115,21 @@ def Bfield(rz,rlin,zlin):
     f.close()
 
   R,Z=np.meshgrid(rlin,zlin)
-  Br=griddata(rz,B[:,0],(R,Z),method=interp_method)
-  Bz=griddata(rz,B[:,1],(R,Z),method=interp_method)
-  Bphi=griddata(rz,B[:,2],(R,Z),method=interp_method)
+  if(itask1<=1)and(1<=itask2):
+    Br=griddata(rz,B[:,0],(R,Z),method=interp_method)
+  else:
+    Br=np.zeros(np.shape(R),dtype=float)
+  if(itask1<=2)and(2<=itask2):
+    Bz=griddata(rz,B[:,1],(R,Z),method=interp_method)
+  else:
+    Bz=np.zeros(np.shape(R),dtype=float)
+  if(itask1<=3)and(3<=itask2):
+    Bphi=griddata(rz,B[:,2],(R,Z),method=interp_method)
+  else:
+    Bphi=np.zeros(np.shape(R),dtype=float)
   return Br,Bz,Bphi
 
-def Pot(rz,rlin,zlin,pot0fac,dpotfac):
+def Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2):
   if adios_version==1:
     print('Not added yet.',flush=True)
   elif adios_version==2:
@@ -133,11 +142,11 @@ def Pot(rz,rlin,zlin,pot0fac,dpotfac):
       print('xgc=xgc1, apply toroidal average to dpot.')
       dpot=np.mean(dpot,axis=0)
     R,Z=np.meshgrid(rlin,zlin)
-    if pot0fac>0:
+    if (itask1<=4)and(4<=itask2)and(pot0fac>0):
       pot02d=griddata(rz,pot0,(R,Z),method=interp_method)
     else:
       pot02d=np.zeros(np.shape(R),dtype=float)
-    if dpotfac>0:
+    if (itask1<=5)and(5<=itask2)and(dpotfac>0):
       dpot2d=griddata(rz,dpot,(R,Z),method=interp_method)
     else:
       dpot2d=np.zeros(np.shape(R),dtype=float)
