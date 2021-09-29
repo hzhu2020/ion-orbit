@@ -101,7 +101,7 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
 
   return
 
-def gyropot_gpu(comm,mu_arr,qi,mi,ngyro):
+def gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac):
   import cupy as cp
   gyro_pot_kernel=cp.RawKernel(r'''
   extern "C" __global__
@@ -162,6 +162,7 @@ def gyropot_gpu(comm,mu_arr,qi,mi,ngyro):
   nthreads=min(Nr,1024)
   gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
+  if (pot0fac==0)and(dpotfac==0): return
   Bmag_gpu=cp.asarray(Bmag,dtype=cp.float64).ravel(order='C')
   rlin_gpu=cp.asarray(rlin,dtype=cp.float64)
   zlin_gpu=cp.asarray(zlin,dtype=cp.float64)
@@ -184,7 +185,7 @@ def gyropot_gpu(comm,mu_arr,qi,mi,ngyro):
   pinned_mempool.free_all_blocks()
   return 
 
-def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
+def gyropot(comm,mu_arr,qi,mi,ngyro,summation,pot0fac,dpotfac):
   global gyropot0,gyrodpot
   Nz,Nr=np.shape(Er00)
   Nmu=np.size(mu_arr)
@@ -201,6 +202,7 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation):
   z0=zlin[0]
   gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
   gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
+  if (pot0fac==0)and(dpotfac==0): return
   for itask in range(itask1,itask2+1):
     iz=int(itask/(Nr*Nmu))
     ir=int((itask-iz*Nr*Nmu)/Nmu)
