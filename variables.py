@@ -329,7 +329,8 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
 
     pks1,_=find_peaks(Hsurf)
     pks2,_=find_peaks(-Hsurf)
-    if (np.size(pks1)>1)or(np.size(pks2)>1):#rare cases when H has multiple peaks&troughs 
+    if (np.size(pks1)>1)or(np.size(pks2)>1):#rare cases when H has multiple peaks&troughs
+      print('H(theta) has multiple peaks at imu=',imu,'iPphi=',iPphi,flush=True)
       theta_total=0.0
       #first, determine number of nodes where \partial H/\partial\theta>0 
       for isurf in range(nsurf):
@@ -343,7 +344,7 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
          
       dtheta=theta_total/float(nH+1)
       iH=-1
-      thetam=theta[0]
+      thetam=theta[0]+dtheta/2.0#starting from this location so that thetal=theta[0]
       while (thetam<theta[nsurf-1])and(iH<nH-1):
         thetal=thetam-dtheta/2.0
         thetar=thetam+dtheta/2.0
@@ -355,8 +356,21 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
           dH[imu,iPphi,iH]=Hr-Hl
           r_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,thetam)
           z_beg[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,thetam)
-          r_end[imu,iPphi,iH]=-1e9
-          z_end[imu,iPphi,iH]=-1e9
+          #When moving to the left, H first decreases, then reaches minimum, then increases
+          while Hl<Hm:
+            thetal=thetal-dtheta
+            if thetal<theta[0]: thetal=thetal+2*np.pi
+            Hl=myinterp.OneD_NL(theta,Hsurf,thetal)
+          thetar=thetal+dtheta
+          if thetar>=theta[0]+2*np.pi: thetar=thetar-2*np.pi
+          Hr=myinterp.OneD_NL(theta,Hsurf,thetar)
+          if thetar<thetal: thetar=thetar+2*np.pi
+          wH=(Hl-Hm)/(Hl-Hr)
+          theta_end=(1-wH)*thetal+wH*thetar
+          if theta_end>=theta[0]+2*np.pi: theta_end=theta_end-2*np.pi
+          r_end[imu,iPphi,iH]=myinterp.OneD_NL(theta,rsurf,theta_end)
+          z_end[imu,iPphi,iH]=myinterp.OneD_NL(theta,zsurf,theta_end)
+        #end if
         thetam=thetam+dtheta
       while (iH<nH-1): 
         iH=iH+1

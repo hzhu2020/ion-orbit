@@ -139,7 +139,7 @@ def Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2):
     dpot=f.read('dpot')
     f.close()
     if xgc=='xgc1':
-      print('xgc=xgc1, apply toroidal average to dpot.')
+      if itask1==0: print('xgc=xgc1, apply toroidal average to dpot.',flush=True)
       dpot=np.mean(dpot,axis=0)
     R,Z=np.meshgrid(rlin,zlin)
     if (itask1<=4)and(4<=itask2)and(pot0fac>0):
