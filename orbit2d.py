@@ -300,7 +300,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     double* Pphi_arr,double* psi2d,double* dist,double psix,double zx,double ra,double za,double cross_psitol,\
     double cross_rztol,double cross_disttol,bool determine_loss)
   {
-    int iorb,num_cross,step_count,itheta,t_ind;
+    int iorb0,iorb,num_cross,step_count,itheta,t_ind;
     double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
     double theta_l,dtheta,wtheta,wt,tau,Bmag_l,Bphi_l,psi,dist_l,dist_surf;
     bool lost;
@@ -310,6 +310,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     dz=zlin[1]-zlin[0];
     dtheta=theta[1]-theta[0];
     iorb=blockIdx.x;
+    iorb0=iorb;
     while(iorb<mynorb)
     {
       r=r_beg[iorb];
@@ -320,9 +321,9 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
         vp_orb1[iorb*nt+it]=0.;
       }
       for (int it=0;it<max_step;it++){
-        r_tmp[iorb*max_step+it]=0.;
-        z_tmp[iorb*max_step+it]=0.;
-        vp_tmp[iorb*max_step+it]=0.;
+        r_tmp[iorb0*max_step+it]=0.;
+        z_tmp[iorb0*max_step+it]=0.;
+        vp_tmp[iorb0*max_step+it]=0.;
       }
       num_cross=0;
       step_count=0;
@@ -344,9 +345,9 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
           }
           if (num_cross==0) step_count=step_count+1;
         }
-        r_tmp[iorb*max_step+it]=r;
-        z_tmp[iorb*max_step+it]=z;
-        vp_tmp[iorb*max_step+it]=vp;
+        r_tmp[iorb0*max_step+it]=r;
+        z_tmp[iorb0*max_step+it]=z;
+        vp_tmp[iorb0*max_step+it]=vp;
         vpc=vp;
         //RK4 1st step
         rhs(qi,mi,r,z,mu,vp,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
@@ -434,9 +435,9 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
            }
            else{
              if (it<max_step-1){
-               r_tmp[iorb*max_step+it+1]=r;
-               z_tmp[iorb*max_step+it+1]=z;
-               vp_tmp[iorb*max_step+it+1]=vp;
+               r_tmp[iorb0*max_step+it+1]=r;
+               z_tmp[iorb0*max_step+it+1]=z;
+               vp_tmp[iorb0*max_step+it+1]=vp;
              }
              step_count=min(step_count,nt-1);
              dt_orb_out_orb[iorb]=tau/double(step_count);
@@ -447,10 +448,10 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
                  t_ind=t_ind-1;
                  wt=1.0;
                }
-               if (abs(r_tmp[iorb*max_step+t_ind+1])<1E-3) wt=0.0;
-               r_orb1[iorb*nt+it2]=(1-wt)*r_tmp[iorb*max_step+t_ind]+wt*r_tmp[iorb*max_step+t_ind+1];
-               z_orb1[iorb*nt+it2]=(1-wt)*z_tmp[iorb*max_step+t_ind]+wt*z_tmp[iorb*max_step+t_ind+1];
-               vp_orb1[iorb*nt+it2]=(1-wt)*vp_tmp[iorb*max_step+t_ind]+wt*vp_tmp[iorb*max_step+t_ind+1];
+               if (abs(r_tmp[iorb0*max_step+t_ind+1])<1E-3) wt=0.0;
+               r_orb1[iorb*nt+it2]=(1-wt)*r_tmp[iorb0*max_step+t_ind]+wt*r_tmp[iorb0*max_step+t_ind+1];
+               z_orb1[iorb*nt+it2]=(1-wt)*z_tmp[iorb0*max_step+t_ind]+wt*z_tmp[iorb0*max_step+t_ind+1];
+               vp_orb1[iorb*nt+it2]=(1-wt)*vp_tmp[iorb0*max_step+t_ind]+wt*vp_tmp[iorb0*max_step+t_ind+1];
              }//for it2
              step_count=step_count+1;
            }//if step_count<nt
@@ -532,9 +533,9 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     z_beg_gpu=cp.asarray(z_beg[iorb1_l:iorb2_l+1],dtype=cp.float64)
     r_end_gpu=cp.asarray(r_end[iorb1_l:iorb2_l+1],dtype=cp.float64)
     z_end_gpu=cp.asarray(z_end[iorb1_l:iorb2_l+1],dtype=cp.float64)
-    r_tmp_gpu=cp.zeros((int(mynorb_l*max_step),),dtype=cp.float64,order='C')
-    z_tmp_gpu=cp.zeros((int(mynorb_l*max_step),),dtype=cp.float64,order='C')
-    vp_tmp_gpu=cp.zeros((int(mynorb_l*max_step),),dtype=cp.float64,order='C')
+    r_tmp_gpu=cp.zeros((int(nblocks*max_step),),dtype=cp.float64,order='C')
+    z_tmp_gpu=cp.zeros((int(nblocks*max_step),),dtype=cp.float64,order='C')
+    vp_tmp_gpu=cp.zeros((int(nblocks*max_step),),dtype=cp.float64,order='C')
     orbit_kernel((nblocks,),(1,),(int(mynorb_l),int(nblocks_max),r_orb_gpu[idx1*nt:idx2*nt],\
             z_orb_gpu[idx1*nt:idx2*nt],vp_orb_gpu[idx1*nt:idx2*nt],steps_orb_gpu[idx1:idx2],\
             dt_orb_out_orb_gpu[idx1:idx2],loss_orb_gpu[idx1:idx2],tau_orb_gpu[idx1:idx2],\
@@ -543,6 +544,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
             int(Nsurf),int(nt),Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,\
             gradBr_gpu,gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu,Pphi_arr_gpu,psi2d_gpu,dist_gpu,\
             float(var.psix),float(var.zx),ra,za,cross_psitol,cross_rztol,cross_disttol,determine_loss))
+    #need to wait for GPU to finish before launching another kernel
     cp.cuda.Stream.null.synchronize()
  
   r_orb=cp.asnumpy(r_orb_gpu).reshape((mynorb,nt),order='C')
