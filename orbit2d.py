@@ -480,11 +480,13 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
   }
   ''','orbit')
   from parameters import gyro_E,Nz,Nr
+  mempool = cp.get_default_memory_pool()
+  mem_limit=mempool.get_limit()
+  mempool.set_limit(fraction=1.)#use mem_limit as a guide, but do not actually place a cap
   r_beg=r_beg.ravel(order='C')
   z_beg=z_beg.ravel(order='C')
   r_end=r_end.ravel(order='C')
   z_end=z_end.ravel(order='C')
-  nblocks_max=4096
   mynorb=iorb2-iorb1+1
   r_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
   z_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
@@ -519,7 +521,6 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     mynorb_l=iorb2_l-iorb1_l+1
     idx1=iorb1_l-iorb1
     idx2=iorb2_l+1-iorb1
-    nblocks=min(nblocks_max,mynorb_l)
     myEr00,myEz00,myEr0m,myEz0m=var.efield(imu)
     Er00_gpu=cp.asarray(myEr00,dtype=cp.float64).ravel(order='C')
     Ez00_gpu=cp.asarray(myEz00,dtype=cp.float64).ravel(order='C')
@@ -533,6 +534,10 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     z_beg_gpu=cp.asarray(z_beg[iorb1_l:iorb2_l+1],dtype=cp.float64)
     r_end_gpu=cp.asarray(r_end[iorb1_l:iorb2_l+1],dtype=cp.float64)
     z_end_gpu=cp.asarray(z_end[iorb1_l:iorb2_l+1],dtype=cp.float64)
+    nblocks_max=4096
+    mem_used=mempool.used_bytes()
+    while (nblocks_max*max_step*8*3)>=(mem_limit-mem_used): nblocks_max=int(nblocks_max/2)
+    nblocks=min(nblocks_max,mynorb_l)
     r_tmp_gpu=cp.zeros((int(nblocks*max_step),),dtype=cp.float64,order='C')
     z_tmp_gpu=cp.zeros((int(nblocks*max_step),),dtype=cp.float64,order='C')
     vp_tmp_gpu=cp.zeros((int(nblocks*max_step),),dtype=cp.float64,order='C')
@@ -546,6 +551,8 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
             float(var.psix),float(var.zx),ra,za,cross_psitol,cross_rztol,cross_disttol,determine_loss))
     #need to wait for GPU to finish before launching another kernel
     cp.cuda.Stream.null.synchronize()
+    del Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,Pphi_arr_gpu,r_beg_gpu,z_beg_gpu,r_end_gpu,z_end_gpu,\
+        r_tmp_gpu,z_tmp_gpu,vp_tmp_gpu
  
   r_orb=cp.asnumpy(r_orb_gpu).reshape((mynorb,nt),order='C')
   z_orb=cp.asnumpy(z_orb_gpu).reshape((mynorb,nt),order='C')
@@ -559,6 +566,5 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
   loss_orb=np.array(loss_orb,dtype=int)
   del r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu,\
       rlin_gpu,zlin_gpu,psi2d_gpu,theta_gpu,dist_gpu,Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,gradBr_gpu,\
-      gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,Pphi_arr_gpu,\
-      r_beg_gpu,z_beg_gpu,r_end_gpu,z_end_gpu,r_tmp_gpu,z_tmp_gpu,vp_tmp_gpu
+      gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu
   return loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb

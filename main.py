@@ -85,6 +85,12 @@ if rank==0: print('Partition orbits took time:',t_end-t_beg,'s',flush=True)
 #determine orbit trajectories through RK4 integration
 t_beg_tot=time.time()
 if use_gpu:
+  mempool = cp.get_default_memory_pool()
+  mem_limit=mempool.get_limit()
+  if mem_limit==0.:
+    if rank==0: print('GPU memory limit not specified, using 100% by default.',flush=True)
+    if rank==0: print('Use CUPY_GPU_MEMORY_LIMIT environment variable to set memory limit.',flush=True)
+    mempool.set_limit(fraction=1.)
   loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.tau_orb_gpu\
   (iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr)
 else:
@@ -139,6 +145,7 @@ if determine_loss:
     loss_output=None
   comm.Gatherv(loss_orb,(loss_output,count1),root=0)
   if rank==0:
+    print('Number of lost orbits:',np.sum(loss_output),flush=True)
     output=open('lost.txt','w')
     output.write('%8d%8d%8d\n'% (nmu,nPphi,nH))
     for iorb in range(norb):
