@@ -281,6 +281,10 @@ elif (rank==0)and(bp_write)and(not adios2_mpi):
   shape=count
   output.write('steps_orb',steps_output,shape,start,count)
   output.write('dt_orb',dt_orb_output,shape,start,count)
+  r_end=np.ravel(r_end,order='C')
+  z_end=np.ravel(z_end,order='C')
+  output.write('R_end',r_end,shape,start,count)
+  output.write('Z_end',z_end,shape,start,count)
   #mu_orb
   start=np.zeros((mu_arr.ndim),dtype=int) 
   count=np.array((mu_arr.shape),dtype=int) 
@@ -311,11 +315,15 @@ elif (bp_write)and(adios2_mpi):
     output.write('mu_orb',mu_arr,shape,start,count)
 
   norb=nmu*nPphi*nH
+  r_end=np.ravel(r_end,order='C')
+  z_end=np.ravel(z_end,order='C')
   shape=np.array([norb,],dtype=int)
   start=np.array([iorb1,],dtype=int) 
   count=np.array([iorb2-iorb1+1,],dtype=int)
   output.write('steps_orb',steps_orb,shape,start,count)
   output.write('dt_orb',dt_orb_out_orb,shape,start,count)
+  output.write('R_end',r_end[iorb1:iorb2+1],shape,start,count)
+  output.write('Z_end',z_end[iorb1:iorb2+1],shape,start,count)
   shape=np.array([norb,nt],dtype=int)
   start=np.array([iorb1,0],dtype=int) 
   count=np.array([iorb2-iorb1+1,nt],dtype=int)
