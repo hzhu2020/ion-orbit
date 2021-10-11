@@ -6,11 +6,11 @@ import os
 from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss,\
      qi,mi,nmu,nPphi,nH,nt,max_step,dt_xgc,nsteps
 
-def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi):
+def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
   global myEr00,myEz00,myEr0m,myEz0m
   if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(int(iorb/(nPphi*nH)))
 
-  dt_orb=dt_xgc/float(nsteps)
+  dt_orb=accel*dt_xgc/float(nsteps)
   dt_orb_out=0.0
   r=r_beg
   z=z_beg
@@ -122,7 +122,7 @@ def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi):
       #first time cross (leave) the surface: output orbits here
       num_cross=1
       if (step_count<nt)and(nsteps==1):
-        dt_orb_out=dt_xgc
+        dt_orb_out=dt_xgc*accel
         r_orb1[step_count]=r
         z_orb1[step_count]=z
         vp_orb1[step_count]=vp
@@ -303,6 +303,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     int iorb0,iorb,num_cross,step_count,itheta,t_ind;
     double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
     double theta_l,dtheta,wtheta,wt,tau,Bmag_l,Bphi_l,psi,dist_l,dist_surf;
+    double dt_orb0;
     bool lost;
     r0=rlin[0];
     z0=zlin[0];
@@ -311,6 +312,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     dtheta=theta[1]-theta[0];
     iorb=blockIdx.x;
     iorb0=iorb;
+    dt_orb0=dt_orb;
     while(iorb<mynorb)
     {
       r=r_beg[iorb];
@@ -471,11 +473,15 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
          break;
       }
       }//end for it
-      if (step_count>nt) step_count=1;
+      if (step_count<=nt){
       steps_orb[iorb]=step_count;
       tau_orb[iorb]=tau;
       loss_orb[iorb]=int(lost);
+      dt_orb=dt_orb0;//reset dt_orb and go to the next orbit
       iorb=iorb+nblocks_max;
+      }else{
+        dt_orb=dt_orb*2;
+      }
     }
   }
   ''','orbit')

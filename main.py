@@ -117,9 +117,13 @@ else:
       mu_old=mu
     else:
       calc_gyroE=False
-    
-    lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,r,z,\
-          r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi)
+
+    step=1
+    accel=1
+    while step==1:
+      lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,r,z,\
+            r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel)
+      accel=accel*2
     if (float(iorb-iorb1)/float(mynorb))>pctg:
       t_end=time.time()
       print('rank=',rank,'finished',int(pctg*100),'% in ',t_end-t_beg_tot,'s',flush=True)
