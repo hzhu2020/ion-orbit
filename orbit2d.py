@@ -3,17 +3,21 @@ import myinterp
 import numpy as np
 import math
 import os
-from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,determine_loss,\
+from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,\
      qi,mi,nmu,nPphi,nH,nt,max_step,dt_xgc,nsteps
 
-def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
+def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_loss):
   global myEr00,myEz00,myEr0m,myEz0m
   if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(int(iorb/(nPphi*nH)))
 
   dt_orb=accel*dt_xgc/float(nsteps)
   dt_orb_out=0.0
-  r=r_beg
-  z=z_beg
+  if determine_loss:
+    r=r_end
+    z=z_end
+  else:
+    r=r_beg
+    z=z_beg
   #prepare the axis position
   ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
   za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
@@ -37,7 +41,10 @@ def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
   tau=0
   step_count=0
   it_count=0
-  num_cross=0 #number of times the orbit has crossed the surface
+  if determine_loss:
+    num_cross=1 #number of times the orbit has crossed the surface
+  else:
+    num_cross=0
   lost=False #whether the particle is lost to the wall
   if debug:
     debug_count=0
@@ -181,7 +188,8 @@ def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
     output.seek(0)
     output.write('%8d\n'%debug_count)
     output.close()
-  if step_count>nt: step_count=1
+  if step_count>nt: step_count=1#not enough time steps to cross the surface
+  if (determine_loss)and(num_cross==1)and(not lost): tau=0.#not enough time steps to determine loss
   return lost,tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1
 
 def rhs(qi,mi,r,z,mu,vp):
@@ -235,7 +243,7 @@ def rhs(qi,mi,r,z,mu,vp):
     dzdt=dzdt/D
     return drdt,dzdt,dvpdt
 
-def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
+def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_loss):
   import cupy as cp
   orbit_kernel=cp.RawKernel(r'''
   extern "C" __device__
@@ -326,8 +334,13 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     dt_orb0=dt_orb;
     while(iorb<mynorb)
     {
-      r=r_beg[iorb];
-      z=z_beg[iorb];
+      if (determine_loss){
+        r=r_end[iorb];
+        z=z_end[iorb];
+      }else{
+        r=r_beg[iorb];
+        z=z_beg[iorb];
+      }
       for (int it=0;it<nt;it++){
         r_orb1[iorb*nt+it]=0.;
         z_orb1[iorb*nt+it]=0.;
@@ -338,7 +351,11 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
         z_tmp[iorb0*max_step+it]=0.;
         vp_tmp[iorb0*max_step+it]=0.;
       }
-      num_cross=0;
+      if (determine_loss){
+        num_cross=1;
+      }else{
+        num_cross=0;
+      }
       step_count=0;
       it_count=0;
       lost=false;
@@ -498,14 +515,16 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
          break;
       }
       }//end for it
-      if (step_count<=nt){
-      steps_orb[iorb]=step_count;
-      tau_orb[iorb]=tau;
-      loss_orb[iorb]=int(lost);
-      dt_orb=dt_orb0;//reset dt_orb and go to the next orbit
-      iorb=iorb+nblocks_max;
-      }else{
+      if ((! determine_loss)&&(step_count>nt)){
         dt_orb=dt_orb*2;
+      }else if((determine_loss)and(num_cross==1)and(! lost)){
+        dt_orb=dt_orb*2;
+      }else{
+        steps_orb[iorb]=step_count;
+        tau_orb[iorb]=tau;
+        loss_orb[iorb]=int(lost);
+        dt_orb=dt_orb0;//reset dt_orb and go to the next orbit
+        iorb=iorb+nblocks_max;
       }
     }
   }

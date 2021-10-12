@@ -92,7 +92,10 @@ if use_gpu:
     if rank==0: print('Use CUPY_GPU_MEMORY_LIMIT environment variable to set memory limit.',flush=True)
     mempool.set_limit(fraction=1.)
   loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.tau_orb_gpu\
-  (iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr)
+  (iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,False)
+  if determine_loss:
+    loss_orb,tau2_orb,_,_,_,_,_=orbit.tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,True)
+    tau_orb=tau_orb+tau2_orb
 else:
   r_orb=np.zeros((mynorb,nt),dtype=float,order='C')
   z_orb=np.zeros((mynorb,nt),dtype=float,order='C')
@@ -108,7 +111,6 @@ else:
     iH=iorb-imu*nPphi*nH-iPphi*nH
     mu=mu_arr[imu]
     Pphi=Pphi_arr[iPphi]
-    r,z=r_beg[imu,iPphi,iH],z_beg[imu,iPphi,iH]
     if iorb==iorb1:
       calc_gyroE=True
       mu_old=mu
@@ -117,13 +119,23 @@ else:
       mu_old=mu
     else:
       calc_gyroE=False
-
+    #first calculate the orbit in the confined region
     step=1
     accel=1
     while step==1:
-      lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,r,z,\
-            r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel)
+      lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
+            z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,False)
       accel=accel*2
+    #then determine the loss orbit
+    if determine_loss:
+      tau2=0.
+      accel=1
+      lost=False
+      while (not lost)and(tau2==0.):
+        lost,tau2,_,_,_,_,_=orbit.tau_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
+              z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,True)
+        accel=accel*2
+      tau=tau+tau2
     if (float(iorb-iorb1)/float(mynorb))>pctg:
       t_end=time.time()
       print('rank=',rank,'finished',int(pctg*100),'% in ',t_end-t_beg_tot,'s',flush=True)
