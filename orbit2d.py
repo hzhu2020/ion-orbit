@@ -36,6 +36,7 @@ def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
 
   tau=0
   step_count=0
+  it_count=0
   num_cross=0 #number of times the orbit has crossed the surface
   lost=False #whether the particle is lost to the wall
   if debug:
@@ -44,7 +45,7 @@ def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
     output=open(debug_dir+'/'+str(iorb)+'.txt','w')
     output.write('%8d\n'%0)#a placeholder for debug_count
  
-  for it in range(np.int(max_step)):
+  for it in range(np.int(max_step*nsteps)):
     if np.isnan(r+z):
       if num_cross==1: lost=True
       break
@@ -60,9 +61,11 @@ def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
       debug_count=debug_count+1
       output.write('%19.10E %19.10E\n'%(r,z))
       
-    r_tmp[it]=r
-    z_tmp[it]=z
-    vp_tmp[it]=vp
+    if it%nsteps==0:
+      r_tmp[it_count]=r
+      z_tmp[it_count]=z
+      vp_tmp[it_count]=vp
+      it_count=it_count+1
     #RK4 1st step
     drdtc,dzdtc,dvpdtc=rhs(qi,mi,r,z,mu,vp)
     dvpdte=dvpdtc/6
@@ -128,16 +131,24 @@ def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
         vp_orb1[step_count]=vp
         step_count=step_count+1
       else:
-        if it<int(max_step)-1:
-          r_tmp[it+1]=r
-          z_tmp[it+1]=z
-          vp_tmp[it+1]=vp
+        if it_count<int(max_step):
+          #interpolate to the next step
+          nsteps_local=(it+1)%nsteps
+          if nsteps_local==0:
+            r_tmp[it_count]=r
+            z_tmp[it_count]=z
+            vp_tmp[it_count]=vp
+          else:
+            r_tmp[it_count]=r_tmp[it_count-1]+(r-r_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
+            z_tmp[it_count]=z_tmp[it_count-1]+(z-z_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
+            vp_tmp[it_count]=vp_tmp[it_count-1]+(r-r_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
         step_count=min(step_count,nt-1)
         dt_orb_out=tau/np.float(step_count)
         for it2 in range(step_count+1):
-          #t_ind=it2*(it+1)/step_count, so t_ind \in [0,it+1]
-          t_ind=math.floor(float(it2)*dt_orb_out/dt_orb)
-          wt=float(it2)*dt_orb_out/dt_orb - t_ind
+          #t_ind should be in the range [0,it_count]
+          t_ind=float(it2)*dt_orb_out/dt_orb/float(nsteps)
+          wt=t_ind-math.floor(t_ind)
+          t_ind=math.floor(t_ind)
           if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
             t_ind=t_ind-1
             wt=1.0
@@ -300,7 +311,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
     double* Pphi_arr,double* psi2d,double* dist,double psix,double zx,double ra,double za,double cross_psitol,\
     double cross_rztol,double cross_disttol,bool determine_loss)
   {
-    int iorb0,iorb,num_cross,step_count,itheta,t_ind;
+    int iorb0,iorb,num_cross,step_count,itheta,t_ind,it_count,nsteps_local;
     double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
     double theta_l,dtheta,wtheta,wt,tau,Bmag_l,Bphi_l,psi,dist_l,dist_surf;
     double dt_orb0;
@@ -329,12 +340,13 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
       }
       num_cross=0;
       step_count=0;
+      it_count=0;
       lost=false;
       tau=0.;
       Bmag_l=TwoD(Bmag,r,z,dr,dz,r0,z0,Nr,Nz);
       Bphi_l=TwoD(Bphi,r,z,dr,dz,r0,z0,Nr,Nz);
       vp=(Pphi_arr[iorb]-qi*psi_surf)/mi/r/Bphi_l*Bmag_l;
-      for (int it=0;it<max_step;it++){
+      for (int it=0;it<max_step*nsteps;it++){
         if (isnan(r+z)){
          if (num_cross==1) lost=true;
          break;
@@ -347,9 +359,12 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
           }
           if (num_cross==0) step_count=step_count+1;
         }
-        r_tmp[iorb0*max_step+it]=r;
-        z_tmp[iorb0*max_step+it]=z;
-        vp_tmp[iorb0*max_step+it]=vp;
+        if (it%nsteps==0){
+          r_tmp[iorb0*max_step+it_count]=r;
+          z_tmp[iorb0*max_step+it_count]=z;
+          vp_tmp[iorb0*max_step+it_count]=vp;
+          it_count=it_count+1;
+        }
         vpc=vp;
         //RK4 1st step
         rhs(qi,mi,r,z,mu,vp,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
@@ -436,16 +451,26 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr):
              step_count=step_count+1;
            }
            else{
-             if (it<max_step-1){
-               r_tmp[iorb0*max_step+it+1]=r;
-               z_tmp[iorb0*max_step+it+1]=z;
-               vp_tmp[iorb0*max_step+it+1]=vp;
+             if (it_count<max_step){
+               nsteps_local=(it+1)%nsteps;
+               if (nsteps_local==0){
+                 r_tmp[iorb0*max_step+it_count]=r;
+                 z_tmp[iorb0*max_step+it_count]=z;
+                 vp_tmp[iorb0*max_step+it_count]=vp;
+               }else{
+                 r_tmp[iorb0*max_step+it_count]=r_tmp[iorb0*max_step+it_count-1]\
+                         +(r-r_tmp[iorb0*max_step+it_count-1])*double(nsteps)/double(nsteps_local);
+                 z_tmp[iorb0*max_step+it_count]=z_tmp[iorb0*max_step+it_count-1]\
+                         +(z-z_tmp[iorb0*max_step+it_count-1])*double(nsteps)/double(nsteps_local);
+                 vp_tmp[iorb0*max_step+it_count]=vp_tmp[iorb0*max_step+it_count-1]\
+                         +(vp-vp_tmp[iorb0*max_step+it_count-1])*double(nsteps)/double(nsteps_local);
+               }
              }
              step_count=min(step_count,nt-1);
              dt_orb_out_orb[iorb]=tau/double(step_count);
              for (int it2=0;it2<step_count+1;it2++){
-               t_ind=floor(double(it2)*dt_orb_out_orb[iorb]/dt_orb);
-               wt=double(it2)*dt_orb_out_orb[iorb]/dt_orb-t_ind;
+               t_ind=floor(double(it2)*dt_orb_out_orb[iorb]/dt_orb/double(nsteps));
+               wt=double(it2)*dt_orb_out_orb[iorb]/dt_orb/double(nsteps)-t_ind;
                if (t_ind==(max_step-1)){
                  t_ind=t_ind-1;
                  wt=1.0;
