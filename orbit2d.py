@@ -6,7 +6,7 @@ import os
 from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,\
      qi,mi,nmu,nPphi,nH,nt,max_step,dt_xgc,nsteps
 
-def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_loss):
+def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_loss):
   global myEr00,myEz00,myEr0m,myEz0m
   if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(int(iorb/(nPphi*nH)-var.imu1))
 
@@ -243,7 +243,7 @@ def rhs(qi,mi,r,z,mu,vp):
     dzdt=dzdt/D
     return drdt,dzdt,dvpdt
 
-def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_loss):
+def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
   import cupy as cp
   orbit_kernel=cp.RawKernel(r'''
   extern "C" __device__
@@ -317,11 +317,11 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
     int Nsurf,int nt,double* Bmag,double* Br,double* Bz,double* Bphi,double* Er00,double* Ez00,\
     double* Er0m,double* Ez0m,double* gradBr,double* gradBz,double* curlbr,double* curlbz,double* curlbphi,\
     double* Pphi_arr,double* psi2d,double* dist,double psix,double zx,double ra,double za,double cross_psitol,\
-    double cross_rztol,double cross_disttol,bool determine_loss)
+    double cross_rztol,double cross_disttol,bool determine_loss,bool reverse,int* bad)
   {
     int iorb0,iorb,num_cross,step_count,itheta,t_ind,it_count,nsteps_local;
     double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
-    double theta_l,dtheta,wtheta,wt,tau,Bmag_l,Bphi_l,psi,dist_l,dist_surf;
+    double theta_l,dtheta,wtheta,wt,tau,Bmag_l,Bphi_l,psi,dist_l,dist_surf,tmp;
     double dt_orb0;
     bool lost;
     r0=rlin[0];
@@ -331,9 +331,14 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
     dtheta=theta[1]-theta[0];
     iorb=blockIdx.x;
     iorb0=iorb;
+    if (reverse) dt_orb=-dt_orb;
     dt_orb0=dt_orb;
     while(iorb<mynorb)
     {
+      if ((reverse)&&(bad[iorb]==0)){
+        iorb=iorb+nblocks_max;
+        continue;
+      }
       if (determine_loss){
         r=r_end[iorb];
         z=z_end[iorb];
@@ -460,6 +465,11 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
           (dist_l>dist_surf*(1+cross_disttol))\
          )){
            num_cross=1;
+           if (sqrt((r-r_end[iorb])*(r-r_end[iorb])+(z-z_end[iorb])*(z-z_end[iorb]))>=cross_rztol){
+             bad[iorb]=1;
+           }else{
+             bad[iorb]=0;
+           }
            if ((step_count<nt)&&(nsteps==1)){
              dt_orb_out_orb[iorb]=dt_orb*double(nsteps);
              r_orb1[iorb*nt+step_count]=r;
@@ -499,6 +509,21 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
              }//for it2
              step_count=step_count+1;
            }//if step_count<nt
+           if (reverse){
+             tau=-tau;
+             for (int it2=0;it2<step_count;it2++){
+               if (it2>=step_count-it2-1) break;
+                 tmp=r_orb1[iorb*nt+it2];
+                 r_orb1[iorb*nt+it2]=r_orb1[iorb*nt+step_count-it2-1];
+                 r_orb1[iorb*nt+step_count-it2-1]=tmp;
+                 tmp=z_orb1[iorb*nt+it2];
+                 z_orb1[iorb*nt+it2]=z_orb1[iorb*nt+step_count-it2-1];
+                 z_orb1[iorb*nt+step_count-it2-1]=tmp;
+                 tmp=vp_orb1[iorb*nt+it2];
+                 vp_orb1[iorb*nt+it2]=vp_orb1[iorb*nt+step_count-it2-1];
+                 vp_orb1[iorb*nt+step_count-it2-1]=tmp;
+             }
+           }
            if (! determine_loss) break;
         }//if cross
        if((num_cross==1)&&(psi<(1-cross_psitol)*psix)&&(z<zx)){
@@ -538,13 +563,27 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
   r_end=r_end.ravel(order='C')
   z_end=z_end.ravel(order='C')
   mynorb=iorb2-iorb1+1
-  r_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
-  z_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
-  vp_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
-  steps_orb_gpu=cp.zeros((mynorb,),dtype=cp.int32)
-  dt_orb_out_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
-  loss_orb_gpu=cp.zeros((mynorb,),dtype=cp.int32)
-  tau_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
+  if stage==1:
+    reverse=False
+    determine_loss=False
+  if stage==2:
+    reverse=True
+    determine_loss=False
+  if stage==3:
+    reverse=False
+    determine_loss=True
+  global r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu
+  global bad,num_bad1,num_bad2
+  if (stage==1)or(stage==3):
+    r_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
+    z_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
+    vp_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
+    steps_orb_gpu=cp.zeros((mynorb,),dtype=cp.int32)
+    dt_orb_out_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
+    loss_orb_gpu=cp.zeros((mynorb,),dtype=cp.int32)
+    tau_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
+    bad=cp.zeros((mynorb,),dtype=cp.int32)
+
   dt_orb=dt_xgc/float(nsteps)
   rlin_gpu=cp.asarray(var.rlin,dtype=cp.float64)
   zlin_gpu=cp.asarray(var.zlin,dtype=cp.float64)
@@ -598,12 +637,13 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
             int(Nr),int(Nz),int(max_step),int(nsteps),theta_gpu,var.psi_surf,qi,mi,mu_arr[imu],dt_orb,\
             int(Nsurf),int(nt),Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,\
             gradBr_gpu,gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu,Pphi_arr_gpu,psi2d_gpu,dist_gpu,\
-            float(var.psix),float(var.zx),ra,za,cross_psitol,cross_rztol,cross_disttol,determine_loss))
+            float(var.psix),float(var.zx),ra,za,cross_psitol,cross_rztol,cross_disttol,determine_loss,
+            reverse,bad[idx1:idx2]))
     #need to wait for GPU to finish before launching another kernel
     cp.cuda.Stream.null.synchronize()
     del Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,Pphi_arr_gpu,r_beg_gpu,z_beg_gpu,r_end_gpu,z_end_gpu,\
         r_tmp_gpu,z_tmp_gpu,vp_tmp_gpu
- 
+
   r_orb=cp.asnumpy(r_orb_gpu).reshape((mynorb,nt),order='C')
   z_orb=cp.asnumpy(z_orb_gpu).reshape((mynorb,nt),order='C')
   vp_orb=cp.asnumpy(vp_orb_gpu).reshape((mynorb,nt),order='C')
@@ -614,7 +654,12 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
   #fot correct MPI communication if writing to orbit.txt
   steps_orb=np.array(steps_orb,dtype=int)
   loss_orb=np.array(loss_orb,dtype=int)
-  del r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu,\
-      rlin_gpu,zlin_gpu,psi2d_gpu,theta_gpu,dist_gpu,Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,gradBr_gpu,\
+  if stage==1:
+    num_bad1=cp.asnumpy(cp.sum(bad))
+    if num_bad1==0: num_bad2=0
+  if stage==2: num_bad2=cp.asnumpy(cp.sum(bad))
+  if (stage>1)or(num_bad1==0):
+    del r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu,bad
+  del rlin_gpu,zlin_gpu,psi2d_gpu,theta_gpu,dist_gpu,Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,gradBr_gpu,\
       gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu
   return loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb

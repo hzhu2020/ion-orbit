@@ -91,10 +91,13 @@ if use_gpu:
     if rank==0: print('GPU memory limit not specified, using 100% by default.',flush=True)
     if rank==0: print('Use CUPY_GPU_MEMORY_LIMIT environment variable to set memory limit.',flush=True)
     mempool.set_limit(fraction=1.)
-  loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.tau_orb_gpu\
-  (iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,False)
+  loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.calc_orb_gpu\
+  (iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,1)
+  if orbit.num_bad1>0:
+    loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.calc_orb_gpu\
+    (iorb1,iorb2,r_end,z_end,r_beg,z_beg,mu_arr,Pphi_arr,2)
   if determine_loss:
-    loss_orb,tau2_orb,_,_,_,_,_=orbit.tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,True)
+    loss_orb,tau2_orb,_,_,_,_,_=orbit.calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,3)
     tau_orb=tau_orb+tau2_orb
 else:
   r_orb=np.zeros((mynorb,nt),dtype=float,order='C')
@@ -123,7 +126,7 @@ else:
     step=1
     accel=1
     while step==1:
-      lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.tau_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
+      lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
             z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,False)
       accel=accel*2
     #then determine the loss orbit
@@ -132,7 +135,7 @@ else:
       accel=1
       lost=False
       while (not lost)and(tau2==0.):
-        lost,tau2,_,_,_,_,_=orbit.tau_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
+        lost,tau2,_,_,_,_,_=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
               z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,True)
         accel=accel*2
       tau=tau+tau2
@@ -151,6 +154,9 @@ t_end_tot=time.time()
 comm.barrier()
 time.sleep(rank*0.001)
 print('rank=',rank,'total time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
+num_bad_total1=comm.reduce(orbit.num_bad1,op=MPI.SUM,root=0)
+num_bad_total2=comm.reduce(orbit.num_bad2,op=MPI.SUM,root=0)
+if rank==0: print('Number of bad orbits before and after reverse integration:',num_bad_total1,num_bad_total2,flush=True)
 #output which orbits are lost
 if determine_loss:
   if rank==0:
@@ -291,14 +297,22 @@ elif (rank==0)and(bp_write)and(not adios2_mpi):
   output.write('nH',value,shape,start,count)
   value=np.array(nt)
   output.write('nt',value,shape,start,count)
+  value=np.array(num_bad_total1)
+  output.write('num_bad1',value,shape,start,count)
+  value=np.array(num_bad_total2)
+  output.write('num_bad2',value,shape,start,count)
   #steps_orb, dt_orb
   start=np.zeros((steps_output.ndim),dtype=int) 
   count=np.array((steps_output.shape),dtype=int) 
   shape=count
   output.write('steps_orb',steps_output,shape,start,count)
   output.write('dt_orb',dt_orb_output,shape,start,count)
+  r_beg=np.ravel(r_beg,order='C')
+  z_beg=np.ravel(z_beg,order='C')
   r_end=np.ravel(r_end,order='C')
   z_end=np.ravel(z_end,order='C')
+  output.write('R_beg',r_beg,shape,start,count)
+  output.write('Z_beg',z_beg,shape,start,count)
   output.write('R_end',r_end,shape,start,count)
   output.write('Z_end',z_end,shape,start,count)
   #mu_orb
@@ -325,12 +339,16 @@ elif (bp_write)and(adios2_mpi):
     output.write('nPphi',np.array(nPphi),shape,start,count)
     output.write('nH',np.array(nH),shape,start,count)
     output.write('nt',np.array(nt),shape,start,count)
+    output.write('num_bad1',np.array(num_bad_total1),shape,start,count)
+    output.write('num_bad2',np.array(num_bad_total2),shape,start,count)
     start=np.zeros((mu_arr.ndim),dtype=int) 
     count=np.array((mu_arr.shape),dtype=int) 
     shape=count
     output.write('mu_orb',mu_arr,shape,start,count)
 
   norb=nmu*nPphi*nH
+  r_beg=np.ravel(r_beg,order='C')
+  z_beg=np.ravel(z_beg,order='C')
   r_end=np.ravel(r_end,order='C')
   z_end=np.ravel(z_end,order='C')
   shape=np.array([norb,],dtype=int)
@@ -338,6 +356,8 @@ elif (bp_write)and(adios2_mpi):
   count=np.array([iorb2-iorb1+1,],dtype=int)
   output.write('steps_orb',steps_orb,shape,start,count)
   output.write('dt_orb',dt_orb_out_orb,shape,start,count)
+  output.write('R_beg',r_beg[iorb1:iorb2+1],shape,start,count)
+  output.write('Z_beg',z_beg[iorb1:iorb2+1],shape,start,count)
   output.write('R_end',r_end[iorb1:iorb2+1],shape,start,count)
   output.write('Z_end',z_end[iorb1:iorb2+1],shape,start,count)
   shape=np.array([norb,nt],dtype=int)
