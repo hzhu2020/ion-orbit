@@ -101,7 +101,7 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
 
   return
 
-def gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac):
+def gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac,iorb1,iorb2):
   import cupy as cp
   gyro_pot_kernel=cp.RawKernel(r'''
   extern "C" __global__
@@ -158,10 +158,14 @@ def gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac):
 
   global gyropot0,gyrodpot
   Nz,Nr=np.shape(Er00)
-  Nmu=np.size(mu_arr)
   nthreads=min(Nr,1024)
-  gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
-  gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
+  global imu1,imu2
+  from parameters import nPphi,nH
+  imu1=int(iorb1/(nPphi*nH))
+  imu2=int(iorb2/(nPphi*nH))
+  Nmu_l=imu2-imu1+1
+  gyropot0=np.zeros((Nz,Nr,Nmu_l),dtype=float)
+  gyrodpot=np.zeros((Nz,Nr,Nmu_l),dtype=float)
   if (pot0fac==0)and(dpotfac==0): return
   Bmag_gpu=cp.asarray(Bmag,dtype=cp.float64).ravel(order='C')
   rlin_gpu=cp.asarray(rlin,dtype=cp.float64)
@@ -170,8 +174,8 @@ def gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac):
   dpot_gpu=cp.asarray(dpot,dtype=cp.float64).ravel(order='C')
   gyropot0_gpu=cp.zeros((Nz*Nr),dtype=cp.float64)
   gyrodpot_gpu=cp.zeros((Nz*Nr),dtype=cp.float64)
-  for imu in range(Nmu):
-    mu=mu_arr[imu]
+  for imu in range(Nmu_l):
+    mu=mu_arr[imu+imu1]
     gyro_pot_kernel((Nz,),(nthreads,),(mu,Bmag_gpu,rlin_gpu,zlin_gpu,pot0_gpu,dpot_gpu,\
                           gyropot0_gpu,gyrodpot_gpu,mi,qi,int(Nz),int(Nr),int(ngyro)))
     gyropot0[:,:,imu]=cp.asnumpy(gyropot0_gpu).reshape((Nz,Nr),order='C')
@@ -189,6 +193,9 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation,pot0fac,dpotfac):
   global gyropot0,gyrodpot
   Nz,Nr=np.shape(Er00)
   Nmu=np.size(mu_arr)
+  global imu1,imu2
+  imu1=0
+  imu2=Nmu-1
   rank=comm.Get_rank()
   size=comm.Get_size()
   #parition in (r,z,mu) just like the orbit partitioning
@@ -288,6 +295,21 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
     freq=nsurf*np.fft.fftfreq(nsurf)
     tmp[abs(freq)>dpot_fourier_maxm]=0
     dpotsurf=np.real(np.fft.ifft(tmp))
+  else:
+    dpotsurf_mu=np.zeros((nsurf,nmu),dtype=float)
+    for imu in range(nmu):
+      if (imu>=imu1)and(imu<=imu2):
+        #do the calculation if imu is in my range
+        count=1
+        tmp=gyrodpot[:,:,imu-imu1]+gyropot0[:,:,imu-imu1]-pot0
+        for i in range(nsurf):
+          dpotsurf_mu[i,imu]=tmp[iy[i],ix[i]]*(1-wy[i])*(1-wx[i]) + tmp[iy[i]+1,ix[i]]*wy[i]*(1-wx[i])\
+                   +tmp[iy[i],ix[i]+1]*(1-wy[i])*wx[i] + tmp[iy[i]+1,ix[i]+1]*wy[i]*wx[i]
+      else:
+        count=0
+      dpotsurf_mu[:,imu]=comm.allreduce(dpotsurf_mu[:,imu],op=summation)
+      count=comm.allreduce(count,op=summation)
+      dpotsurf_mu[:,imu]=dpotsurf_mu[:,imu]/float(count)
  
   #partition tasks
   rank=comm.Get_rank()
@@ -306,11 +328,7 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
     imu=int(itask/(nPphi))
     iPphi=itask-imu*nPphi
     if gyro_E:
-      tmp=gyrodpot[:,:,imu]+gyropot0[:,:,imu]-pot0
-      dpotsurf[:]=0.0
-      for i in range(nsurf):
-        dpotsurf[i]=tmp[iy[i],ix[i]]*(1-wy[i])*(1-wx[i]) + tmp[iy[i]+1,ix[i]]*wy[i]*(1-wx[i])\
-                   +tmp[iy[i],ix[i]+1]*(1-wy[i])*wx[i] + tmp[iy[i]+1,ix[i]+1]*wy[i]*wx[i]
+      dpotsurf[:]=dpotsurf_mu[:,imu]
       #smooth dpotsurf
       tmp=np.fft.fft(dpotsurf)
       freq=nsurf*np.fft.fftfreq(nsurf)

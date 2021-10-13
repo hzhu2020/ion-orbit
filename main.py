@@ -39,11 +39,18 @@ vp_max=f0_vp_max*vt
 mu_arr=np.linspace(0,mu_max,nmu)
 mu_arr[0]=mu_arr[1]/2 #to avoid zero mu
 vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
+#partition orbits among processes
+t_beg=time.time()
+iorb1,iorb2,norb_list=var.partition_orbits(comm,partition_opt,nmu,nPphi,nH)
+mynorb=iorb2-iorb1+1
+norb=nmu*nPphi*nH
+t_end=time.time()
+if rank==0: print('Partition orbits took time:',t_end-t_beg,'s',flush=True)
 #prepare gyro-averaged electric field
 if (gyro_E):
   t_beg=time.time()
   if use_gpu:
-    var.gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac)
+    var.gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac,iorb1,iorb2)
   else:
     var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM,pot0fac,dpotfac)
   t_end=time.time()
@@ -75,13 +82,6 @@ if rank==0:
   if count%4!=0: output.write('\n')
   output.write('%8d\n'%-1)
   output.close()
-#partition orbits among processes
-t_beg=time.time()
-iorb1,iorb2,norb_list=var.partition_orbits(comm,partition_opt,nmu,nPphi,nH)
-mynorb=iorb2-iorb1+1
-norb=nmu*nPphi*nH
-t_end=time.time()
-if rank==0: print('Partition orbits took time:',t_end-t_beg,'s',flush=True)
 #determine orbit trajectories through RK4 integration
 t_beg_tot=time.time()
 if use_gpu:

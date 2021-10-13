@@ -8,7 +8,7 @@ from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,\
 
 def tau_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_loss):
   global myEr00,myEz00,myEr0m,myEz0m
-  if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(int(iorb/(nPphi*nH)))
+  if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(int(iorb/(nPphi*nH)-var.imu1))
 
   dt_orb=accel*dt_xgc/float(nsteps)
   dt_orb_out=0.0
@@ -571,7 +571,7 @@ def tau_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,determine_lo
     mynorb_l=iorb2_l-iorb1_l+1
     idx1=iorb1_l-iorb1
     idx2=iorb2_l+1-iorb1
-    myEr00,myEz00,myEr0m,myEz0m=var.efield(imu)
+    myEr00,myEz00,myEr0m,myEz0m=var.efield(imu-var.imu1)
     Er00_gpu=cp.asarray(myEr00,dtype=cp.float64).ravel(order='C')
     Ez00_gpu=cp.asarray(myEz00,dtype=cp.float64).ravel(order='C')
     Er0m_gpu=cp.asarray(myEr0m,dtype=cp.float64).ravel(order='C')
