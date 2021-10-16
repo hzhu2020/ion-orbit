@@ -157,6 +157,23 @@ print('rank=',rank,'total time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
 num_bad_total1=comm.reduce(orbit.num_bad1,op=MPI.SUM,root=0)
 num_bad_total2=comm.reduce(orbit.num_bad2,op=MPI.SUM,root=0)
 if rank==0: print('Number of bad orbits before and after reverse integration:',num_bad_total1,num_bad_total2,flush=True)
+#output bad orbits
+if rank==0:
+  count1=norb_list
+  bad_output=np.zeros((norb,),dtype=np.int32)
+else:
+  count1=None
+  bad_output=None
+comm.Gatherv(orbit.bad,(bad_output,count1),root=0)
+if rank==0:
+  output=open('bad.txt','w')
+  output.write('%8d%8d%8d\n'% (nmu,nPphi,nH))
+  for iorb in range(norb):
+    value=bad_output[iorb]
+    output.write('%1d\n'%value)
+  output.write('%8d\n'%-1)
+  output.close()
+
 #output which orbits are lost
 if determine_loss:
   if rank==0:

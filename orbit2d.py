@@ -573,7 +573,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
     reverse=False
     determine_loss=True
   global r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu
-  global bad,num_bad1,num_bad2
+  global bad,bad_gpu,num_bad1,num_bad2
   if (stage==1)or(stage==3):
     r_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
     z_orb_gpu=cp.zeros((mynorb*nt,),dtype=cp.float64,order='C')
@@ -582,7 +582,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
     dt_orb_out_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
     loss_orb_gpu=cp.zeros((mynorb,),dtype=cp.int32)
     tau_orb_gpu=cp.zeros((mynorb,),dtype=cp.float64)
-    bad=cp.zeros((mynorb,),dtype=cp.int32)
+    bad_gpu=cp.zeros((mynorb,),dtype=cp.int32)
 
   dt_orb=dt_xgc/float(nsteps)
   rlin_gpu=cp.asarray(var.rlin,dtype=cp.float64)
@@ -638,7 +638,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
             int(Nsurf),int(nt),Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,\
             gradBr_gpu,gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu,Pphi_arr_gpu,psi2d_gpu,dist_gpu,\
             float(var.psix),float(var.zx),ra,za,cross_psitol,cross_rztol,cross_disttol,determine_loss,
-            reverse,bad[idx1:idx2]))
+            reverse,bad_gpu[idx1:idx2]))
     #need to wait for GPU to finish before launching another kernel
     cp.cuda.Stream.null.synchronize()
     del Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,Pphi_arr_gpu,r_beg_gpu,z_beg_gpu,r_end_gpu,z_end_gpu,\
@@ -651,15 +651,16 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
   dt_orb_out_orb=cp.asnumpy(dt_orb_out_orb_gpu)
   loss_orb=cp.asnumpy(loss_orb_gpu)
   tau_orb=cp.asnumpy(tau_orb_gpu)
+  if (stage==1)or(stage==2): bad=cp.asnumpy(bad_gpu)
   #fot correct MPI communication if writing to orbit.txt
   steps_orb=np.array(steps_orb,dtype=int)
   loss_orb=np.array(loss_orb,dtype=int)
   if stage==1:
-    num_bad1=cp.asnumpy(cp.sum(bad))
-    if num_bad1==0: num_bad2=0
-  if stage==2: num_bad2=cp.asnumpy(cp.sum(bad))
+    num_bad1=np.sum(bad)
+    num_bad2=0
+  if stage==2: num_bad2=np.sum(bad)
   if (stage>1)or(num_bad1==0):
-    del r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu,bad
+    del r_orb_gpu,z_orb_gpu,vp_orb_gpu,steps_orb_gpu,dt_orb_out_orb_gpu,loss_orb_gpu,tau_orb_gpu,bad_gpu
   del rlin_gpu,zlin_gpu,psi2d_gpu,theta_gpu,dist_gpu,Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,gradBr_gpu,\
       gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu
   return loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb
