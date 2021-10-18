@@ -99,6 +99,9 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
   Ez0m=-Ez0m
   Ephi0m=-Ephi0m
 
+  if (not gyro_E):
+    global imu1
+    imu1=0
   return
 
 def gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac,iorb1,iorb2):
