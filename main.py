@@ -96,6 +96,20 @@ if use_gpu:
   if orbit.num_bad1>0:
     loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.calc_orb_gpu\
     (iorb1,iorb2,r_end,z_end,r_beg,z_beg,mu_arr,Pphi_arr,2)
+  if orbit.num_bad2>0:
+    import orbit2d2p
+    orbit2d2p.calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,orbit.bad)
+    num_bad3=np.sum(orbit2d2p.bad)
+    for iorb in range(iorb2-iorb1+1):
+      if (orbit.bad[iorb]==1)and(orbit2d2p.bad[iorb]==0):
+        tau_orb[iorb]=orbit2d2p.tau_orb[iorb]
+        dt_orb_out_orb[iorb]=orbit2d2p.dt_orb_out_orb[iorb]
+        steps_orb[iorb]=orbit2d2p.steps_orb[iorb]
+        r_orb[iorb,:]=orbit2d2p.r_orb[iorb,:]
+        z_orb[iorb,:]=orbit2d2p.z_orb[iorb,:]
+        vp_orb[iorb,:]=orbit2d2p.vp_orb[iorb,:]
+  else:
+    num_bad3=0
   if determine_loss:
     loss_orb,tau2_orb,_,_,_,_,_=orbit.calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,3)
     tau_orb=tau_orb+tau2_orb
@@ -157,6 +171,9 @@ print('rank=',rank,'total time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
 num_bad_total1=comm.reduce(orbit.num_bad1,op=MPI.SUM,root=0)
 num_bad_total2=comm.reduce(orbit.num_bad2,op=MPI.SUM,root=0)
 if rank==0: print('Number of bad orbits before and after reverse integration:',num_bad_total1,num_bad_total2,flush=True)
+
+num_bad_total3=comm.reduce(num_bad3,op=MPI.SUM,root=0)
+if rank==0: print('Number of bad orbits after 2-point integration:',num_bad_total3,flush=True)
 #output bad orbits
 if rank==0:
   count1=norb_list
