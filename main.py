@@ -102,6 +102,7 @@ if use_gpu:
     num_bad3=np.sum(orbit2d2p.bad)
     for iorb in range(iorb2-iorb1+1):
       if (orbit.bad[iorb]==1)and(orbit2d2p.bad[iorb]==0):
+        orbit.bad[iorb]=0
         tau_orb[iorb]=orbit2d2p.tau_orb[iorb]
         dt_orb_out_orb[iorb]=orbit2d2p.dt_orb_out_orb[iorb]
         steps_orb[iorb]=orbit2d2p.steps_orb[iorb]
