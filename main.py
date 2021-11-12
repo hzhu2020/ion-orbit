@@ -41,7 +41,7 @@ mu_arr[0]=mu_arr[1]/2 #to avoid zero mu
 vphi_arr=np.linspace(-vp_max,vp_max,nPphi)
 #partition orbits among processes
 t_beg=time.time()
-iorb1,iorb2,norb_list=var.partition_orbits(comm,partition_opt,nmu,nPphi,nH)
+iorb1,iorb2,norb_list=var.partition_orbits2(comm,partition_opt,nmu,nPphi,nH)
 mynorb=iorb2-iorb1+1
 norb=nmu*nPphi*nH
 t_end=time.time()
@@ -228,6 +228,15 @@ if rank==0:
     value=tau_output[iorb]
     output.write('%19.10E '%value)
     if count%4==0: output.write('\n')
+comm.barrier()
+
+#output time used for each MPI process
+time_tot=comm.gather(t_end_tot-t_beg_tot,root=0)
+if rank==0:
+  output=open('time.txt','w')
+  output.write('%8d\n'% (size))
+  for isize in range(size): output.write('%6.1f\n'%time_tot[isize])
+  output.write('%8d'%-1)
 comm.barrier()
 
 #the following are for xgc to read

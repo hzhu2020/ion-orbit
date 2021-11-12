@@ -442,6 +442,61 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
   z_end=comm.allreduce(z_end,op=summation)
   return r_beg,z_beg,r_end,z_end
 
+def partition_orbits2(comm,partition_opt,nmu,nPphi,nH):
+  rank = comm.Get_rank()
+  size = comm.Get_size()
+  if (partition_opt):#partition orbits based on the actual time used
+    if rank==0:
+      #read from file
+      from parameters import input_dir
+      fid=open(input_dir+'/time.txt','r')
+      size_in=int(fid.readline(8))
+      fid.readline(1)
+      time_in=np.zeros((size_in),dtype=float)
+      for isize in range(size_in):
+        time_in[isize]=fid.readline(6)
+        fid.readline(1)
+      if int(fid.readline(8))!=-1: print('Wrong ending of time.txt!')
+      norb=nmu*nPphi*nH
+      tau_opt=np.zeros((norb,),dtype=float)
+      for iorb in range(norb):
+        ind=float(iorb)/float(norb)*float(size_in)
+        ind=math.floor(ind)
+        tau_opt[iorb]=time_in[ind]
+
+      sum_tau=sum(tau_opt)
+      avg_tau=float(sum_tau)/float(size)
+      accuml_tau=0
+      iorb1_list=np.zeros((size,),dtype=int)
+      iorb2_list=np.zeros((size,),dtype=int)
+      iorb1_list[:]=1
+      iorb2_list[:]=norb
+      iorb=0
+      for ipe in range(size-1):
+        iorb=iorb+1
+        accuml_tau=accuml_tau+tau_opt[iorb-1]
+        while ((accuml_tau<avg_tau)and(norb-iorb>size-ipe)):
+          iorb=iorb+1
+          accuml_tau=accuml_tau+tau_opt[iorb-1]
+   
+        accuml_tau=accuml_tau-avg_tau
+        iorb2_list[ipe]=iorb
+        iorb1_list[ipe+1]=iorb+1
+    else:#for rank!=0
+      iorb1_list,iorb2_list=[None]*2
+    iorb1_list,iorb2_list=comm.bcast((iorb1_list,iorb2_list),root=0)
+    iorb1=iorb1_list[rank]-1#start from 0
+    iorb2=iorb2_list[rank]-1
+    mynorb=iorb2-iorb1+1
+    norb_list=iorb2_list-iorb1_list+1
+
+  else:#parition orbit based on orbit indices, will cause large load imbalance
+    iorb1,iorb2,norb_list=simple_partition(comm,nmu*nPphi*nH,size)
+    iorb1=iorb1[rank]
+    iorb2=iorb2[rank] 
+  return iorb1,iorb2,norb_list
+
+
 def partition_orbits(comm,partition_opt,nmu,nPphi,nH):
   rank = comm.Get_rank()
   size = comm.Get_size()
