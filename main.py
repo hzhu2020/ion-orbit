@@ -120,6 +120,7 @@ else:
   vp_orb=np.zeros((mynorb,nt),dtype=float,order='C')
   steps_orb=np.zeros((mynorb,),dtype=int)
   dt_orb_out_orb=np.zeros((mynorb,),dtype=float)
+  bad_orb=np.zeros((mynorb,),dtype=np.int32)
   if determine_loss: loss_orb=np.zeros((mynorb,),dtype=int)
   tau_orb=np.zeros((mynorb,),dtype=float)
   pctg=0.01
@@ -141,7 +142,7 @@ else:
     step=1
     accel=1
     while step==1:
-      lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
+      lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1,bad=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
             z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,False)
       accel=accel*2
     #then determine the loss orbit
@@ -150,7 +151,7 @@ else:
       accel=1
       lost=False
       while (not lost)and(tau2==0.):
-        lost,tau2,_,_,_,_,_=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
+        lost,tau2,_,_,_,_,_,_=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
               z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,True)
         accel=accel*2
       tau=tau+tau2
@@ -163,18 +164,23 @@ else:
     vp_orb[iorb-iorb1,:]=vp_orb1
     steps_orb[iorb-iorb1]=step
     dt_orb_out_orb[iorb-iorb1]=dt_orb_out
+    bad_orb[iorb-iorb1]=bad
     if (lost)and(determine_loss): loss_orb[iorb-iorb1]=1
     tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
 comm.barrier()
 time.sleep(rank*0.001)
 print('rank=',rank,'total time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
-num_bad_total1=comm.reduce(orbit.num_bad1,op=MPI.SUM,root=0)
-num_bad_total2=comm.reduce(orbit.num_bad2,op=MPI.SUM,root=0)
-if rank==0: print('Number of bad orbits before and after reverse integration:',num_bad_total1,num_bad_total2,flush=True)
-
-num_bad_total3=comm.reduce(num_bad3,op=MPI.SUM,root=0)
-if rank==0: print('Number of bad orbits after 2-point integration:',num_bad_total3,flush=True)
+if use_gpu:
+  num_bad_total1=comm.reduce(orbit.num_bad1,op=MPI.SUM,root=0)
+  num_bad_total2=comm.reduce(orbit.num_bad2,op=MPI.SUM,root=0)
+  if rank==0: print('Number of bad orbits before and after reverse integration:',num_bad_total1,num_bad_total2,flush=True)
+  num_bad_total3=comm.reduce(num_bad3,op=MPI.SUM,root=0)
+  if rank==0: print('Number of bad orbits after 2-point integration:',num_bad_total3,flush=True)
+else:
+  num_bad=np.sum(bad_orb)
+  num_bad_total=comm.reduce(num_bad,op=MPI.SUM,root=0)
+  if rank==0: print('Number of bad orbits:',num_bad_total,flush=True)
 #output bad orbits
 if rank==0:
   count1=norb_list
@@ -182,7 +188,10 @@ if rank==0:
 else:
   count1=None
   bad_output=None
-comm.Gatherv(orbit.bad,(bad_output,count1),root=0)
+if use_gpu:
+  comm.Gatherv(orbit.bad,(bad_output,count1),root=0)
+else:
+  comm.Gatherv(bad_orb,(bad_output,count1),root=0)
 if rank==0:
   output=open('bad.txt','w')
   output.write('%8d%8d%8d\n'% (nmu,nPphi,nH))
@@ -341,10 +350,14 @@ elif (rank==0)and(bp_write)and(not adios2_mpi):
   output.write('nH',value,shape,start,count)
   value=np.array(nt)
   output.write('nt',value,shape,start,count)
-  value=np.array(num_bad_total1)
-  output.write('num_bad1',value,shape,start,count)
-  value=np.array(num_bad_total2)
-  output.write('num_bad2',value,shape,start,count)
+  if use_gpu:
+    value=np.array(num_bad_total1)
+    output.write('num_bad1',value,shape,start,count)
+    value=np.array(num_bad_total2)
+    output.write('num_bad2',value,shape,start,count)
+  else:
+    value=np.array(num_bad_total)
+    output.write('num_bad',value,shape,start,count)
   #steps_orb, dt_orb
   start=np.zeros((steps_output.ndim),dtype=int) 
   count=np.array((steps_output.shape),dtype=int) 
@@ -383,8 +396,11 @@ elif (bp_write)and(adios2_mpi):
     output.write('nPphi',np.array(nPphi),shape,start,count)
     output.write('nH',np.array(nH),shape,start,count)
     output.write('nt',np.array(nt),shape,start,count)
-    output.write('num_bad1',np.array(num_bad_total1),shape,start,count)
-    output.write('num_bad2',np.array(num_bad_total2),shape,start,count)
+    if use_gpu:
+      output.write('num_bad1',np.array(num_bad_total1),shape,start,count)
+      output.write('num_bad2',np.array(num_bad_total2),shape,start,count)
+    else:
+      output.write('num_bad',np.array(num_bad_total),shape,start,count)
     start=np.zeros((mu_arr.ndim),dtype=int) 
     count=np.array((mu_arr.shape),dtype=int) 
     shape=count

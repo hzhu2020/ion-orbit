@@ -12,6 +12,7 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
 
   dt_orb=accel*dt_xgc/float(nsteps)
   dt_orb_out=0.0
+  bad=0
   if determine_loss:
     r=r_end
     z=z_end
@@ -131,6 +132,10 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
        ): 
       #first time cross (leave) the surface: output orbits here
       num_cross=1
+      if np.sqrt((r-r_end)**2+(z-z_end)**2)>=cross_rztol:
+        bad=1
+      else:
+        bad=0
       if (step_count<nt)and(nsteps==1):
         dt_orb_out=dt_xgc*accel
         r_orb1[step_count]=r
@@ -190,7 +195,7 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
     output.close()
   if step_count>nt: step_count=1#not enough time steps to cross the surface
   if (determine_loss)and(num_cross==1)and(not lost): tau=0.#not enough time steps to determine loss
-  return lost,tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1
+  return lost,tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1,bad
 
 def rhs(qi,mi,r,z,mu,vp):
     #B
