@@ -196,22 +196,28 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation,pot0fac,dpotfac):
   global gyropot0,gyrodpot
   Nz,Nr=np.shape(Er00)
   Nmu=np.size(mu_arr)
-  global imu1,imu2
-  imu1=0
-  imu2=Nmu-1
   rank=comm.Get_rank()
   size=comm.Get_size()
   #parition in (r,z,mu) just like the orbit partitioning
   itask1,itask2,ntasks_list=simple_partition(comm,Nr*Nz*Nmu,size)
   itask1=itask1[rank]
   itask2=itask2[rank]
+  #determine local range of mu
+  global imu1,imu2
+  iz=int(itask1/(Nr*Nmu))
+  ir=int((itask1-iz*Nr*Nmu)/Nmu)
+  imu1=itask1-iz*Nr*Nmu-ir*Nmu
+  iz=int(itask2/(Nr*Nmu))
+  ir=int((itask2-iz*Nr*Nmu)/Nmu)
+  imu2=itask2-iz*Nr*Nmu-ir*Nmu
+  Nmu_l=imu2-imu1+1
 
   dr=rlin[1]-rlin[0]
   dz=zlin[1]-zlin[0]
   r0=rlin[0]
   z0=zlin[0]
-  gyropot0=np.zeros((Nz,Nr,Nmu),dtype=float)
-  gyrodpot=np.zeros((Nz,Nr,Nmu),dtype=float)
+  gyropot0=np.zeros((Nz,Nr,Nmu_l),dtype=float)
+  gyrodpot=np.zeros((Nz,Nr,Nmu_l),dtype=float)
   if (pot0fac==0)and(dpotfac==0): return
   for itask in range(itask1,itask2+1):
     iz=int(itask/(Nr*Nmu))
@@ -222,12 +228,12 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation,pot0fac,dpotfac):
     r=rlin[ir]
     z=zlin[iz]
     if np.isnan(B):
-      gyropot0[iz,ir,imu]=np.nan
-      gyrodpot[iz,ir,imu]=np.nan
+      gyropot0[iz,ir,imu-imu1]=np.nan
+      gyrodpot[iz,ir,imu-imu1]=np.nan
       continue
     rho=np.sqrt(2*mi*mu/B/qi**2)
-    gyropot0[iz,ir,imu]=0.0
-    gyrodpot[iz,ir,imu]=0.0
+    gyropot0[iz,ir,imu-imu1]=0.0
+    gyrodpot[iz,ir,imu-imu1]=0.0
     for igyro in range(ngyro):
       angle=2*np.pi*float(igyro)/float(ngyro)
       r1=r+rho*np.cos(angle)
@@ -237,8 +243,8 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation,pot0fac,dpotfac):
       iz1=math.floor((z1-z0)/dz)
       wz=(z1-z0)/dz-iz1
       if (ir1<0) or (ir1>Nr-2) or (iz1<0) or (iz1>Nz-2):
-        gyropot0[iz,ir,imu]=np.nan
-        gyrodpot[iz,ir,imu]=np.nan
+        gyropot0[iz,ir,imu-imu1]=np.nan
+        gyrodpot[iz,ir,imu-imu1]=np.nan
         tmp1=np.nan
         tmp2=np.nan
       else:
@@ -246,11 +252,25 @@ def gyropot(comm,mu_arr,qi,mi,ngyro,summation,pot0fac,dpotfac):
             +pot0[iz1,ir1+1]*(1-wz)*wr + pot0[iz1+1,ir1+1]*wz*wr
         tmp2=dpot[iz1,ir1]*(1-wz)*(1-wr) + dpot[iz1+1,ir1]*wz*(1-wr)\
             +dpot[iz1,ir1+1]*(1-wz)*wr + dpot[iz1+1,ir1+1]*wz*wr
-        gyropot0[iz,ir,imu]=gyropot0[iz,ir,imu]+tmp1/float(ngyro)
-        gyrodpot[iz,ir,imu]=gyrodpot[iz,ir,imu]+tmp2/float(ngyro)
+        gyropot0[iz,ir,imu-imu1]=gyropot0[iz,ir,imu-imu1]+tmp1/float(ngyro)
+        gyrodpot[iz,ir,imu-imu1]=gyrodpot[iz,ir,imu-imu1]+tmp2/float(ngyro)
   #end for itask
-  gyropot0=comm.allreduce(gyropot0,op=summation)
-  gyrodpot=comm.allreduce(gyrodpot,op=summation)
+  for imu in range(Nmu):
+    if (imu>=imu1)and(imu<=imu2):
+      tmp=gyropot0[:,:,imu-imu1]
+      tmp=comm.allreduce(tmp,op=summation)
+      gyropot0[:,:,imu-imu1]=tmp
+    else:
+      tmp=np.zeros((Nz,Nr),dtype=float)
+      tmp=comm.allreduce(tmp,op=summation)
+    comm.barrier()
+    if (imu>=imu1)and(imu<=imu2):
+      tmp=gyrodpot[:,:,imu-imu1]
+      tmp=comm.allreduce(tmp,op=summation)
+      gyrodpot[:,:,imu-imu1]=tmp
+    else:
+      tmp=np.zeros((Nz,Nr),dtype=float)
+      tmp=comm.allreduce(tmp,op=summation)
   return
 
 def efield(imu):
