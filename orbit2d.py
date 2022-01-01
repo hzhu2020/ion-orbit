@@ -153,7 +153,7 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
           else:
             r_tmp[it_count]=r_tmp[it_count-1]+(r-r_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
             z_tmp[it_count]=z_tmp[it_count-1]+(z-z_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
-            vp_tmp[it_count]=vp_tmp[it_count-1]+(r-r_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
+            vp_tmp[it_count]=vp_tmp[it_count-1]+(vp-vp_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
         step_count=min(step_count,nt-1)
         dt_orb_out=tau/np.float(step_count)
         for it2 in range(step_count+1):
