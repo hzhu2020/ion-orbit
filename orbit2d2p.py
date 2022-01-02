@@ -84,7 +84,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
     double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
     double theta_l,dtheta,wtheta,wt,tau[2],Bmag_l,Bphi_l,psi,dist_l,dist_surf,tmp;
     double dt_orb0,z_mid,r_old[2],z_old[2],vp_old[2];
-    bool lost,unfinished;
+    bool lost,unfinished,close;
     r0=rlin[0];
     z0=zlin[0];
     dr=rlin[1]-rlin[0];
@@ -113,6 +113,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
       tau[0]=0.;
       tau[1]=0.;
       unfinished=false;
+      close=false;
       if (bad[iorb]==0){
         iorb=iorb+nblocks_max;
         continue;
@@ -208,14 +209,16 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
         r_old[iloop]=r;
         z_old[iloop]=z;
         vp_old[iloop]=vp;
+        if (sqrt((r_old[1]-r_old[0])*(r_old[1]-r_old[0])+(z_old[1]-z_old[0])*(z_old[1]-z_old[0]))<cross_rztol){
+          close=true;
+        }
        }//end for 1st iloop
        if (num_cross==1){
          step_count=0;
          dt_orb_out_orb[iorb]=0.;
          break;
        }
-       if ((num_cross==0)&&(sqrt((r_old[1]-r_old[0])*(r_old[1]-r_old[0])+\
-              (z_old[1]-z_old[0])*(z_old[1]-z_old[0]))<cross_rztol)){
+       if ((num_cross==0)&&(close)){
         bad[iorb]=0;
         for(iloop=0;iloop<2;iloop++){
           r=r_old[iloop];

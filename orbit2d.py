@@ -277,6 +277,7 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
   z_old=np.zeros((2,),dtype=float)
   vp_old=np.zeros((2,),dtype=float)
   lost=False #whether the particle is lost to the wall
+  close=False #whether two trajectories have met
   if debug:
     debug_count=0
     if not(os.path.isdir(debug_dir)): os.mkdir(debug_dir)
@@ -362,13 +363,14 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
       z_old[iloop]=z
       vp_old[iloop]=vp
       tau[iloop]=tau[iloop]+dt_orb
+      if (np.sqrt((r_old[0]-r_old[1])**2+(z_old[0]-z_old[1])**2)<cross_rztol): close=True
       #end for 1st iloop
     if num_cross==1:
       dt_orb_out=0.
       step_count=0.
       bad=1
       break
-    if (num_cross==0) and (np.sqrt((r_old[1]-r_old[0])**2+(z_old[1]-z_old[0])**2)<cross_rztol):
+    if (num_cross==0) and (close):
       bad=0
       for iloop in range(2):
         r=r_old[iloop]
