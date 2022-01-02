@@ -248,6 +248,182 @@ def rhs(qi,mi,r,z,mu,vp):
     dzdt=dzdt/D
     return drdt,dzdt,dvpdt
 
+def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
+  determine_loss=False
+  global myEr00,myEz00,myEr0m,myEz0m
+  if calc_gyroE: myEr00,myEz00,myEr0m,myEz0m=var.efield(int(iorb/(nPphi*nH)-var.imu1))
+
+  dt_orb=accel*dt_xgc/float(nsteps)
+  dt_orb_out=0.0
+  bad=0
+  z_mid=(z_beg+z_end)/2.
+  #prepare the axis position
+  ra=var.rsurf[0]-var.dist[0]*math.cos(var.theta[0])
+  za=var.zsurf[0]-var.dist[0]*math.sin(var.theta[0])
+
+  r_orb1=np.zeros((nt,),dtype=float)
+  z_orb1=np.zeros((nt,),dtype=float)
+  vp_orb1=np.zeros((nt,),dtype=float)
+
+  r_tmp=np.zeros((np.int(2*max_step),),dtype=float)
+  z_tmp=np.zeros((np.int(2*max_step),),dtype=float)
+  vp_tmp=np.zeros((np.int(2*max_step),),dtype=float)
+
+  tau=np.zeros((2,),dtype=float)
+  step_count=0
+  it_count=np.zeros((2,),dtype=int)
+  num_cross=0
+  r_old=np.zeros((2,),dtype=float)
+  z_old=np.zeros((2,),dtype=float)
+  vp_old=np.zeros((2,),dtype=float)
+  lost=False #whether the particle is lost to the wall
+  if debug:
+    debug_count=0
+    if not(os.path.isdir(debug_dir)): os.mkdir(debug_dir)
+    output=open(debug_dir+'/'+str(iorb)+'.txt','w')
+    output.write('%8d\n'%0)#a placeholder for debug_count
+
+  for it in range(np.int(max_step*nsteps)):
+    for iloop in range(2):
+      if it==0:
+        if iloop==0:
+          r_old[iloop]=r_beg
+          z_old[iloop]=z_beg
+        else:
+          r_old[iloop]=r_end
+          z_old[iloop]=z_end
+        ix,iy,wx,wy,Bmag=myinterp.TwoD(var.Bmag,r_old[iloop],z_old[iloop])
+        if np.isnan(Bmag):
+          print('Wrong initial orbit locations: iorb=',iorb,'r=',r_old[iloop],'z=',z_old[iloop])
+          exit()
+        Bphi=var.Bphi[iy,ix]*(1-wy)*(1-wx) + var.Bphi[iy+1,ix]*wy*(1-wx)\
+            +var.Bphi[iy,ix+1]*(1-wy)*wx + var.Bphi[iy+1,ix+1]*wy*wx
+        vp_old[iloop]=(Pphi-qi*var.psi_surf)/mi/r_old[iloop]/Bphi*Bmag
+      #end if it==0
+      r=r_old[iloop]
+      z=z_old[iloop]
+      vp=vp_old[iloop]
+      if np.isnan(r+z): break
+      if it%nsteps==0:
+        r_tmp[iloop*int(max_step)+it_count[iloop]]=r
+        z_tmp[iloop*int(max_step)+it_count[iloop]]=z
+        vp_tmp[iloop*int(max_step)+it_count[iloop]]=vp
+        it_count[iloop]=it_count[iloop]+1
+        if(debug):
+          debug_count=debug_count+1
+          output.write('%19.10E %19.10E\n'%(r,z))
+
+      if iloop==1: dt_orb=-dt_orb
+      #RK4 1st step
+      drdtc,dzdtc,dvpdtc=rhs(qi,mi,r,z,mu,vp)
+      dvpdte=dvpdtc/6
+      drdte=drdtc/6
+      dzdte=dzdtc/6
+      vpc=vp+dvpdtc*dt_orb/2
+      rc=r+drdtc*dt_orb/2
+      zc=z+dzdtc*dt_orb/2
+      if np.isnan(rc+zc): break
+      #RK4 2nd step
+      drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
+      dvpdte=dvpdte+dvpdtc/3
+      drdte=drdte+drdtc/3
+      dzdte=dzdte+dzdtc/3
+      rc=r+drdtc*dt_orb/2
+      zc=z+dzdtc*dt_orb/2
+      if np.isnan(rc+zc): break
+      #RK4 3nd step
+      drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
+      dvpdte=dvpdte+dvpdtc/3
+      drdte=drdte+drdtc/3
+      dzdte=dzdte+dzdtc/3
+      rc=r+drdtc*dt_orb
+      zc=z+dzdtc*dt_orb
+      if np.isnan(rc+zc): break
+      #Rk4 4th step
+      drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
+      dvpdte=dvpdte+dvpdtc/6
+      drdte=drdte+drdtc/6
+      dzdte=dzdte+dzdtc/6
+      vp=vp+dvpdte*dt_orb
+      r=r+drdte*dt_orb
+      z=z+dzdte*dt_orb
+      if np.isnan(r+z): break
+
+      #check if the orbit has crossed the surface
+      psi=myinterp.TwoD(var.psi2d,r,z)
+      psi=psi[4]
+      theta=math.atan2(z-za,r-ra)
+      if theta<=var.theta[0]: theta=theta+2*np.pi
+      dist=np.sqrt((r-ra)**2+(z-za)**2)
+      dist_surf=myinterp.OneD_NL(var.theta,var.dist,theta)
+      if (psi>(1+cross_psitol)*var.psi_surf)or(dist>dist_surf*(1+cross_disttol)): num_cross=1
+      if iloop==1: dt_orb=-dt_orb
+      r_old[iloop]=r
+      z_old[iloop]=z
+      vp_old[iloop]=vp
+      tau[iloop]=tau[iloop]+dt_orb
+      #end for 1st iloop
+    if num_cross==1:
+      dt_orb_out=0.
+      step_count=0.
+      bad=1
+      break
+    if (num_cross==0) and (np.sqrt((r_old[1]-r_old[0])**2+(z_old[1]-z_old[0])**2)<cross_rztol):
+      bad=0
+      for iloop in range(2):
+        r=r_old[iloop]
+        z=z_old[iloop]
+        vp=vp_old[iloop]
+        if it_count[iloop]<int(max_step):
+          #interpolate to the next step
+          nsteps_local=(it+1)%nsteps
+          if nsteps_local==0:
+            r_tmp[iloop*int(max_step)+it_count[iloop]]=r
+            z_tmp[iloop*int(max_step)+it_count[iloop]]=z
+            vp_tmp[iloop*int(max_step)+it_count[iloop]]=vp
+          else:
+            r_tmp[iloop*int(max_step)+it_count[iloop]]=r_tmp[iloop*int(max_step)+it_count[iloop]-1]\
+                        +(r-r_tmp[iloop*int(max_step)+it_count[iloop]-1])*float(nsteps)/float(nsteps_local)
+            z_tmp[iloop*int(max_step)+it_count[iloop]]=z_tmp[iloop*int(max_step)+it_count[iloop]-1]\
+                        +(z-z_tmp[iloop*int(max_step)+it_count[iloop]-1])*float(nsteps)/float(nsteps_local)
+            vp_tmp[iloop*int(max_step)+it_count[iloop]]=vp_tmp[iloop*int(max_step)+it_count[iloop]-1]\
+                        +(vp-vp_tmp[iloop*int(max_step)+it_count[iloop]-1])*float(nsteps)/float(nsteps_local)
+      #end for 2nd iloop
+      step_count=min(it_count[0]+it_count[1],nt-1)
+      dt_orb_out=(tau[0]+tau[1])/np.float(step_count)
+      for it2 in range(step_count+1):
+        tmp=float(it2)*dt_orb_out
+        if tmp<tau[0]:
+          iloop=0
+          t_ind=tmp/dt_orb/float(nsteps)
+          wt=t_ind-math.floor(t_ind)
+          t_ind=math.floor(t_ind)
+        else:
+          iloop=1
+          tmp=tau[0]+tau[1]-tmp
+          t_ind=tmp/dt_orb/float(nsteps)
+          wt=t_ind-math.floor(t_ind)
+          t_ind=math.floor(t_ind)
+        if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
+          t_ind=t_ind-1
+          wt=1.0
+        if abs(r_tmp[iloop*int(max_step)+t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value
+        r_orb1[it2]=(1-wt)*r_tmp[iloop*int(max_step)+t_ind]+wt*r_tmp[iloop*int(max_step)+t_ind+1]
+        z_orb1[it2]=(1-wt)*z_tmp[iloop*int(max_step)+t_ind]+wt*z_tmp[iloop*int(max_step)+t_ind+1]
+        vp_orb1[it2]=(1-wt)*vp_tmp[iloop*int(max_step)+t_ind]+wt*vp_tmp[iloop*int(max_step)+t_ind+1]
+      #end for it2
+      step_count=step_count+1
+      break
+    #end if close enough
+  #end for it
+  if it==int(max_step*nsteps)-1: step_count=1#not enough time steps to cross the surface
+  if debug:
+    output.write('%8d\n'%-1)
+    output.seek(0)
+    output.write('%8d\n'%debug_count)
+    output.close()
+  return lost,tau[0]+tau[1],dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1,bad
+
 def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
   import cupy as cp
   orbit_kernel=cp.RawKernel(r'''

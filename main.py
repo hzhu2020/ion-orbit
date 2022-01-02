@@ -145,6 +145,29 @@ else:
       lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1,bad=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
             z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,False)
       accel=accel*2
+    r_orb[iorb-iorb1,:]=r_orb1
+    z_orb[iorb-iorb1,:]=z_orb1
+    vp_orb[iorb-iorb1,:]=vp_orb1
+    steps_orb[iorb-iorb1]=step
+    dt_orb_out_orb[iorb-iorb1]=dt_orb_out
+    bad_orb[iorb-iorb1]=bad
+    tau_orb[iorb-iorb1]=tau
+    #use 2-point orbit integration
+    if bad==1:
+      step=1
+      accel=1
+      while step==1:
+        lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1,bad=orbit.calc_orb_2p(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
+            z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel)
+        accel=accel*2
+      if bad==0:
+        r_orb[iorb-iorb1,:]=r_orb1
+        z_orb[iorb-iorb1,:]=z_orb1
+        vp_orb[iorb-iorb1,:]=vp_orb1
+        steps_orb[iorb-iorb1]=step
+        dt_orb_out_orb[iorb-iorb1]=dt_orb_out
+        bad_orb[iorb-iorb1]=0
+        tau_orb[iorb-iorb1]=tau
     #then determine the loss orbit
     if determine_loss:
       tau2=0.
@@ -154,19 +177,12 @@ else:
         lost,tau2,_,_,_,_,_,_=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
               z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,True)
         accel=accel*2
-      tau=tau+tau2
+      tau_orb[iorb-iorb1]=tau_orb[iorb-iorb1]+tau2
     if (float(iorb-iorb1)/float(mynorb))>pctg:
       t_end=time.time()
       print('rank=',rank,'finished',int(pctg*100),'% in ',t_end-t_beg_tot,'s',flush=True)
       pctg=float(iorb-iorb1)/float(mynorb)+0.01
-    r_orb[iorb-iorb1,:]=r_orb1
-    z_orb[iorb-iorb1,:]=z_orb1
-    vp_orb[iorb-iorb1,:]=vp_orb1
-    steps_orb[iorb-iorb1]=step
-    dt_orb_out_orb[iorb-iorb1]=dt_orb_out
-    bad_orb[iorb-iorb1]=bad
     if (lost)and(determine_loss): loss_orb[iorb-iorb1]=1
-    tau_orb[iorb-iorb1]=tau
 t_end_tot=time.time()
 comm.barrier()
 time.sleep(rank*0.001)
