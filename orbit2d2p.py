@@ -114,6 +114,8 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
       tau[1]=0.;
       unfinished=false;
       close=false;
+      r_old[0]=0.;r_old[1]=0.;
+      z_old[0]=0.;z_old[1]=0.;
       if (bad[iorb]==0){
         iorb=iorb+nblocks_max;
         continue;
