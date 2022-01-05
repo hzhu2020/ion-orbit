@@ -54,8 +54,6 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
   Br,Bz,Bphi=setup.Bfield(rz,rlin,zlin,itask1,itask2)
   #read potential
   global pot0,dpot
-  pot0=np.zeros((Nz,Nr),dtype=float)
-  dpot=np.zeros((Nz,Nr),dtype=float)
   pot0,dpot=setup.Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2)
 
   pot0=comm.allreduce(pot0,op=summation)
@@ -287,6 +285,13 @@ def efield(imu):
     myEz0m=Ez0m
   
   return myEr00,myEz00,myEr0m,myEz0m
+
+def potfield(imu):
+  if gyro_E:
+    pot=gyropot0[:,:,imu]+gyrodpot[:,:,imu]
+  else:
+    pot=pot0+dpot
+  return pot
 
 def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
   global dH
