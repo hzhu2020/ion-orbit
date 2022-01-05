@@ -24,7 +24,7 @@ except:
   use_gpu=False
 
 #initialize some global variables
-vt=np.sqrt(1.60217552E-19*Ti/mi) #thermal speed
+vt=np.sqrt(1.60217662E-19*Ti/mi) #thermal speed
 t_beg=time.time()
 var.init(pot0fac,dpotfac,Nr,Nz,comm,MPI.SUM)
 myinterp.init(var.R,var.Z)
