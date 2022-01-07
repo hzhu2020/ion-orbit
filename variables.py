@@ -24,7 +24,7 @@ def varTwoD(x2d,y2d,f2d,xin,yin):
 
   return ix,iy,wx,wy,fout
 
-def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
+def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
   rank=comm.Get_rank()
   size=comm.Get_size()
   #read mesh
@@ -41,7 +41,7 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
   zlin=np.linspace(min(zmesh),max(zmesh),Nz)
   Ra=(min(rmesh)+max(rmesh))/2 #major radius
 
-  itask1,itask2,itask_list=simple_partition(comm,6,size)
+  itask1,itask2,itask_list=simple_partition(comm,4,size)
   itask1=itask1[rank]
   itask2=itask2[rank]
   R,Z=np.meshgrid(rlin,zlin)
@@ -52,12 +52,7 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
   #read B field
   global Bmag,Br,Bz,Bphi,br,bz,bphi
   Br,Bz,Bphi=setup.Bfield(rz,rlin,zlin,itask1,itask2)
-  #read potential
-  global pot0,dpot
-  pot0,dpot=setup.Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2)
-
-  pot0=comm.allreduce(pot0,op=summation)
-  dpot=comm.allreduce(dpot,op=summation)
+  #MPI reduction after performing griddata interpoldation on psi and B
   psi2d=comm.allreduce(psi2d,op=summation)
   Br=comm.allreduce(Br,op=summation)
   Bz=comm.allreduce(Bz,op=summation)
@@ -66,6 +61,22 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
   br=Br/Bmag
   bz=Bz/Bmag
   bphi=Bphi/Bmag
+  #read potential
+  global pot0,dpot
+  if (pot0fac>0)or(dpotfac>0):
+    itask1,itask2,ntasks_list=simple_partition(comm,Nr*Nz,size)
+    itask1=itask1[rank]
+    itask2=itask2[rank]
+    setup.Pot_init(rank)
+    if use_gpu:
+      pot0,dpot=setup.Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2)
+    else:
+      pot0,dpot=setup.Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2)
+    pot0=comm.allreduce(pot0,op=summation)
+    dpot=comm.allreduce(dpot,op=summation)
+  else:
+    pot0=np.zeros((Nz,Nr),dtype=float)
+    dpot=np.zeros((Nz,Nr),dtype=float)
   #pin the starting node of the surface at the top or bottom
   if Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
     theta0=+np.pi/2

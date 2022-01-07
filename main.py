@@ -26,7 +26,7 @@ except:
 #initialize some global variables
 vt=np.sqrt(1.60217662E-19*Ti/mi) #thermal speed
 t_beg=time.time()
-var.init(pot0fac,dpotfac,Nr,Nz,comm,MPI.SUM)
+var.init(pot0fac,dpotfac,Nr,Nz,comm,MPI.SUM,use_gpu)
 myinterp.init(var.R,var.Z)
 t_end=time.time()
 if rank==0: print('Initialization took time:',t_end-t_beg,'s',flush=True)
