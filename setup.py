@@ -131,29 +131,8 @@ def Bfield(rz,rlin,zlin,itask1,itask2):
 
 def Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2):
   if adios_version==1:
-    if itask1==0: print('ADIOS1 is no longer supported!',flush=True)
-    exit()
+    print('Not added yet.',flush=True)
   elif adios_version==2:
-    #for interpolating 00 potential
-    if pot0fac>0:
-      fname=input_dir+'/xgc.mesh.bp'
-      f=ad.open(fname,'r')
-      psi1d=f.read('psi_surf')
-      f.close()
-      fname=input_dir+'/xgc.fluxavg.bp'
-      f=ad.open(fname,'r')
-      nnode=f.read('nnode')
-      npsi=f.read('npsi')
-      nelement=f.read('nelement')
-      eindex=f.read('eindex')
-      value=f.read('value')
-      f.close()
-      if npsi!=np.size(psi1d):
-        if itask1==0: print('Something wrong with psi grid, npsi=',npsi,'size(psi1d)=',np.size(psi1d),flush=True)
-        exit()
-    else:
-      psi1d=0
-    #read potential
     fname=input_dir+'/'+pot_file
     f=ad.open(fname,'r')
     pot0=f.read('pot0')
@@ -164,24 +143,11 @@ def Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2):
       dpot=np.mean(dpot,axis=0)
     R,Z=np.meshgrid(rlin,zlin)
     if (itask1<=4)and(4<=itask2)and(pot0fac>0):
-      pot01d=np.zeros((npsi,),dtype=float)
-      count=np.zeros((npsi,),dtype=int)#could alternatively use count to determine empty list
-      for i in range(nnode):
-        for j in range(nelement[i]):
-          ind=eindex[i,j]-1#different index ordering from Fortran
-          pot01d[ind]=pot01d[ind]+pot0[i]*value[i,j]
-          count[ind]=count[ind]+1
+      pot02d=griddata(rz,pot0,(R,Z),method=interp_method)
     else:
-      pot01d=np.zeros((npsi,),dtype=float)
+      pot02d=np.zeros(np.shape(R),dtype=float)
     if (itask1<=5)and(5<=itask2)and(dpotfac>0):
       dpot2d=griddata(rz,dpot,(R,Z),method=interp_method)
     else:
       dpot2d=np.zeros(np.shape(R),dtype=float)
-    if pot0fac>0:
-      empty=np.zeros((0,),dtype=int)
-      for i in range(npsi-1):
-        if abs(psi1d[i]-psi1d[i+1])<surf_psitol*psi1d[i]: empty=np.append(empty,i)
-      if itask1==0: print('The following 1D psi surfaces are discarded:',empty,flush=True)
-      psi1d=np.delete(psi1d,empty)
-      pot01d=np.delete(pot01d,empty)
-  return psi1d,pot0fac*pot01d,dpotfac*dpot2d
+  return pot0fac*pot02d,dpotfac*dpot2d

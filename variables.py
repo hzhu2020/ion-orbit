@@ -52,6 +52,13 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
   #read B field
   global Bmag,Br,Bz,Bphi,br,bz,bphi
   Br,Bz,Bphi=setup.Bfield(rz,rlin,zlin,itask1,itask2)
+  #read potential
+  global pot0,dpot
+  pot0,dpot=setup.Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2)
+
+  pot0=comm.allreduce(pot0,op=summation)
+  dpot=comm.allreduce(dpot,op=summation)
+  psi2d=comm.allreduce(psi2d,op=summation)
   Br=comm.allreduce(Br,op=summation)
   Bz=comm.allreduce(Bz,op=summation)
   Bphi=comm.allreduce(Bphi,op=summation)
@@ -59,25 +66,6 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation):
   br=Br/Bmag
   bz=Bz/Bmag
   bphi=Bphi/Bmag
-
-  #read potential
-  global pot0,dpot
-  psi1d,pot01d,dpot=setup.Pot(rz,rlin,zlin,pot0fac,dpotfac,itask1,itask2)
-
-  pot01d=comm.allreduce(pot01d,op=summation)
-  dpot=comm.allreduce(dpot,op=summation)
-  psi2d=comm.allreduce(psi2d,op=summation)
-  #special treatment to make sure the 2D pot0 varies smoothly in poloidal direction
-  pot0=np.zeros((Nz,Nr),dtype=float)
-  if np.size(psi1d)>1:
-    itask1,itask2,ntasks_list=simple_partition(comm,Nr*Nz,size)
-    itask1=itask1[rank]
-    itask2=itask2[rank]
-    for itask in range(itask1,itask2+1):
-      iz=int(itask/Nr)
-      ir=int(itask-iz*Nr)
-      pot0[iz,ir]=np.interp(psi2d[iz,ir],psi1d,pot01d)
-    pot0=comm.allreduce(pot0,op=summation)
   #pin the starting node of the surface at the top or bottom
   if Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
     theta0=+np.pi/2
