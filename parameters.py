@@ -41,7 +41,6 @@ surf_psitol=1E-5
 surf_rztol=1E-4
 #tolerance parameters for determing whether the orbit has crossed the LCFS
 cross_psitol=0.0025 #percentage
-cross_private=0.0002#percentage
 cross_rztol=0.005 #meter
 cross_disttol=0.005 #percentage
 #for debug

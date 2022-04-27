@@ -3,7 +3,7 @@ import myinterp
 import numpy as np
 import math
 import os
-from parameters import cross_psitol,cross_private,cross_rztol,cross_disttol,debug,debug_dir,\
+from parameters import cross_psitol,cross_rztol,cross_disttol,debug,debug_dir,\
      qi,mi,nmu,nPphi,nH,nt,max_step,dt_xgc,nsteps
 
 def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_loss):
@@ -171,12 +171,6 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
         #end for it2
         step_count=step_count+1
       if (not determine_loss): break
-
-    if (num_cross==1) and \
-       (psi<(1-cross_private)*var.psix) and\
-       (z<var.zx):
-      lost=True #assume lost if in the private region
-      break
 
     if (num_cross==1) and (\
        (psi<(1-cross_psitol)*var.psi_surf) \
@@ -500,7 +494,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
     int Nsurf,int nt,double* Bmag,double* Br,double* Bz,double* Bphi,double* Er00,double* Ez00,\
     double* Er0m,double* Ez0m,double* gradBr,double* gradBz,double* curlbr,double* curlbz,double* curlbphi,\
     double* Pphi_arr,double* psi2d,double* dist,double psix,double zx,double ra,double za,double cross_psitol,\
-    double cross_private,double cross_rztol,double cross_disttol,bool determine_loss,bool reverse,int* bad)
+    double cross_rztol,double cross_disttol,bool determine_loss,bool reverse,int* bad)
   {
     int iorb0,iorb,num_cross,step_count,itheta,t_ind,it_count,nsteps_local;
     double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
@@ -709,10 +703,6 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
            }
            if (! determine_loss) break;
         }//if cross
-       if((num_cross==1)&&(psi<(1-cross_private)*psix)&&(z<zx)){
-          lost=true;
-          break;
-         }
        if((num_cross==1)&&(\
          (psi<(1-cross_psitol)*psi_surf)||\
          (sqrt((r-r_beg[iorb])*(r-r_beg[iorb])+(z-z_beg[iorb])*(z-z_beg[iorb]))<cross_rztol)||\
@@ -820,7 +810,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
             int(Nr),int(Nz),int(max_step),int(nsteps),theta_gpu,var.psi_surf,qi,mi,mu_arr[imu],dt_orb,\
             int(Nsurf),int(nt),Bmag_gpu,Br_gpu,Bz_gpu,Bphi_gpu,Er00_gpu,Ez00_gpu,Er0m_gpu,Ez0m_gpu,\
             gradBr_gpu,gradBz_gpu,curlbr_gpu,curlbz_gpu,curlbphi_gpu,Pphi_arr_gpu,psi2d_gpu,dist_gpu,\
-            float(var.psix),float(var.zx),ra,za,cross_psitol,cross_private,cross_rztol,cross_disttol,\
+            float(var.psix),float(var.zx),ra,za,cross_psitol,cross_rztol,cross_disttol,\
             determine_loss,reverse,bad_gpu[idx1:idx2]))
     #need to wait for GPU to finish before launching another kernel
     cp.cuda.Stream.null.synchronize()
