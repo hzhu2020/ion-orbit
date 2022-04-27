@@ -172,7 +172,7 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
         step_count=step_count+1
       if (not determine_loss): break
 
-    if (num_cross==1) and (\
+    if (num_cross==1) and (z>var.zx) and (\
        (psi<(1-cross_psitol)*var.psi_surf) \
        or (np.sqrt((r-r_beg)**2+(z-z_beg)**2)<cross_rztol)\
        or (dist<dist_surf*(1-cross_disttol))
@@ -703,7 +703,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
            }
            if (! determine_loss) break;
         }//if cross
-       if((num_cross==1)&&(\
+       if((num_cross==1)&&(z>zx)&&(\
          (psi<(1-cross_psitol)*psi_surf)||\
          (sqrt((r-r_beg[iorb])*(r-r_beg[iorb])+(z-z_beg[iorb])*(z-z_beg[iorb]))<cross_rztol)||\
          (dist_l<dist_surf*(1-cross_disttol))\
