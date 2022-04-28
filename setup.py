@@ -98,6 +98,7 @@ def Curl(r,z,fldr,fldz,fldphi,Nr,Nz):
   return curlr,curlz,curlphi
 
 def Bfield(rz,rlin,zlin,itask1,itask2):
+  global B
   if adios_version==1:
     fname=input_dir+'/xgc.bfield.bp'
     f=ad.file(fname)
@@ -162,26 +163,109 @@ def Pot_init(rank):
     dpot=np.mean(dpot,axis=0)
   return
 
-def Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2):
+def grid_deriv_init():
+  global nelement_r,eindex_r,value_r,nelement_z,eindex_z,value_z,basis,nnode
+  fname=input_dir+'/xgc.grad_rz.bp'
+  fid=ad.open(fname,'r')
+  nelement_r=fid.read('nelement_r')
+  eindex_r=fid.read('eindex_r')
+  value_r=fid.read('value_r')
+  nelement_z=fid.read('nelement_z')
+  eindex_z=fid.read('eindex_z')
+  value_z=fid.read('value_z')
+  basis=fid.read('basis')
+  nnode=len(basis)
+
+  nelement_r=np.transpose(nelement_r)
+  eindex_r=np.transpose(eindex_r)
+  value_r=np.transpose(value_r)
+  nelement_z=np.transpose(nelement_z)
+  eindex_z=np.transpose(eindex_z)
+  value_z=np.transpose(value_z)
+  fid.close()
+  return
+
+def get_grid_E(inode1,inode2,comm,summation):
+  global Er00,Ez00,Er0m,Ez0m
+  Epsi00=np.zeros((nnode,),dtype=float)
+  Etheta00=np.zeros((nnode,),dtype=float)
+  Epsi0m=np.zeros((nnode,),dtype=float)
+  Etheta0m=np.zeros((nnode,),dtype=float)
+  Er00=np.zeros((nnode,),dtype=float)
+  Ez00=np.zeros((nnode,),dtype=float)
+  Er0m=np.zeros((nnode,),dtype=float)
+  Ez0m=np.zeros((nnode,),dtype=float)
+  for i in range(inode1,inode2+1):
+    for j in range(nelement_r[i]):
+      ind=eindex_r[j,i]
+      Epsi00[i]=Epsi00[i]+pot0[ind-1]*value_r[j,i]
+      Epsi0m[i]=Epsi0m[i]+dpot[ind-1]*value_r[j,i]
+    for j in range(nelement_z[i]):
+      ind=eindex_z[j,i]
+      Etheta00[i]=Etheta00[i]+pot0[ind-1]*value_z[j,i]
+      Etheta0m[i]=Etheta0m[i]+dpot[ind-1]*value_z[j,i]
+
+  Epsi00=-Epsi00
+  Etheta00=-Etheta00
+  Epsi0m=-Epsi0m
+  Etheta0m=-Etheta0m
+  for i in range(inode1,inode2+1):
+    if basis[i]==1:
+      Er00[i]=Epsi00[i]
+      Ez00[i]=Etheta00[i]
+      Er0m[i]=Epsi0m[i]
+      Ez0m[i]=Etheta0m[i]
+    else:
+      tmp=np.sqrt(B[i,0]**2+B[i,1]**2)
+      Er00[i]=(Epsi00[i]*B[i,1]+Etheta00[i]*B[i,0])/tmp
+      Ez00[i]=(-Epsi00[i]*B[i,0]+Etheta00[i]*B[i,1])/tmp
+      Er0m[i]=(Epsi0m[i]*B[i,1]+Etheta0m[i]*B[i,0])/tmp
+      Ez0m[i]=(-Epsi0m[i]*B[i,0]+Etheta0m[i]*B[i,1])/tmp
+
+  Er00=comm.allreduce(Er00,op=summation)
+  Ez00=comm.allreduce(Ez00,op=summation)
+  Er0m=comm.allreduce(Er0m,op=summation)
+  Ez0m=comm.allreduce(Ez0m,op=summation)
+  return
+
+def Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,flag):
   Nr=np.size(rlin)
   Nz=np.size(zlin)
   pot02d=np.zeros((Nz,Nr),dtype=float)
   dpot2d=np.zeros((Nz,Nr),dtype=float)
+  if flag==2:
+    Er002d=np.zeros((Nz,Nr),dtype=float)
+    Ez002d=np.zeros((Nz,Nr),dtype=float)
+    Er0m2d=np.zeros((Nz,Nr),dtype=float)
+    Ez0m2d=np.zeros((Nz,Nr),dtype=float)
   for itask in range(itask1,itask2+1):
     iz=int(itask/Nr)
     ir=int(itask-iz*Nr)
     itr,p=search_tr2([rlin[ir],zlin[iz]])
     if (itr>0):
-      if(max(p)<1.0): p=t_coeff_mod([rlin[ir],zlin[iz]],itr,p,psi2d[iz,ir],psix)
+      #no need to use t_coeff_mod
+      #if(max(p)<1.0): p=t_coeff_mod([rlin[ir],zlin[iz]],itr,p,psi2d[iz,ir],psix)
       for i in range(3):
         node=nd[i,itr-1]
-        dpot2d[iz,ir]=dpot2d[iz,ir]+p[i]*dpot[node-1]
         pot02d[iz,ir]=pot02d[iz,ir]+p[i]*pot0[node-1]
+        dpot2d[iz,ir]=dpot2d[iz,ir]+p[i]*dpot[node-1]
+        if flag==2:
+          Er002d[iz,ir]=Er002d[iz,ir]+p[i]*Er00[node-1]
+          Ez002d[iz,ir]=Ez002d[iz,ir]+p[i]*Ez00[node-1]
+          Er0m2d[iz,ir]=Er0m2d[iz,ir]+p[i]*Er0m[node-1]
+          Ez0m2d[iz,ir]=Ez0m2d[iz,ir]+p[i]*Ez0m[node-1]
     else:
       pot02d[iz,ir]=np.nan
       dpot2d[iz,ir]=np.nan
-
-  return pot0fac*pot02d,dpotfac*dpot2d
+      if flag==2:
+        Er002d[iz,ir]=np.nan
+        Ez002d[iz,ir]=np.nan
+        Er0m2d[iz,ir]=np.nan
+        Ez0m2d[iz,ir]=np.nan
+  if flag==1:
+    return pot0fac*pot02d,dpotfac*dpot2d
+  elif flag==2:
+    return pot0fac*pot02d,dpotfac*dpot2d,pot0fac*Er002d,pot0fac*Ez002d,dpotfac*Er0m2d,dpotfac*Ez0m2d
 
 def search_tr2(xy):
    itr=-1
@@ -234,7 +318,7 @@ def t_coeff_mod(xy,itr,p,psi_in,psix):
     p[b-1]=p_temp*p[b-1]/t_temp
   return p
 
-def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2):
+def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,flag):
   import cupy as cp
   interp_pot_kernel = cp.RawKernel(r'''
   extern "C" __device__    
@@ -333,7 +417,8 @@ def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2):
         if ((tri_psi)&&(itr[0]>0)&&(tmp<1.0))
         {
           psi_in=psi2d[itask];
-          t_coeff_mod(r,z,rlin,zlin,p,psix,psi_in,psi_rz,itr[0],num_tri,nd,Nr,Nz);
+          //no need to use t_coeff_mod
+          //t_coeff_mod(r,z,rlin,zlin,p,psix,psi_in,psi_rz,itr[0],num_tri,nd,Nr,Nz);
         }
         if (itr[0]>0){
           for(int k=0;k<3;k++){
@@ -352,10 +437,6 @@ def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2):
   ''', 'interp_pot')
   Nr=np.size(rlin)
   Nz=np.size(zlin)
-  pot0_gpu=cp.array(pot0,dtype=cp.float64)
-  dpot_gpu=cp.array(dpot,dtype=cp.float64)
-  pot02d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
-  dpot2d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
   nblocks_max=4096
   ntasks=itask2-itask1+1
   nblocks=min(nblocks_max,ntasks)
@@ -373,16 +454,44 @@ def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2):
   psi2d_gpu=cp.array(psi2d,dtype=cp.float64).ravel(order='C')
   psi_rz_gpu=cp.array(psi_rz,dtype=cp.float64)
   tri_psi=True
-  interp_pot_kernel((nblocks,),(1,),(int(ihi),int(jhi),int(num_tri),guess_min_gpu,inv_guess_d_gpu,\
-    guess_xtable_gpu,guess_list_gpu,guess_count_gpu,mapping_gpu,tri_psi,rlin_gpu,zlin_gpu,float(psix),\
-    psi2d_gpu,psi_rz_gpu,nd_gpu,int(rlin.size),int(zlin.size),int(itask1),int(itask2),int(nblocks_max),\
-    pot0_gpu,dpot_gpu,pot02d_gpu,dpot2d_gpu))
-  pot02d=cp.asnumpy(pot02d_gpu).reshape((Nz,Nr),order='C')
-  dpot2d=cp.asnumpy(dpot2d_gpu).reshape((Nz,Nr),order='C')
+  if flag==1:
+    nloops=1
+  elif flag==2:
+    nloops=3
+  for iloop in range(nloops):
+    #reset them to zero for each loop
+    pot02d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
+    dpot2d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
+    if iloop==0:
+      pot0_gpu=cp.array(pot0,dtype=cp.float64)
+      dpot_gpu=cp.array(dpot,dtype=cp.float64)
+    elif iloop==1:
+      pot0_gpu=cp.array(Er00,dtype=cp.float64)
+      dpot_gpu=cp.array(Ez00,dtype=cp.float64)
+    elif iloop==2:
+      pot0_gpu=cp.array(Er0m,dtype=cp.float64)
+      dpot_gpu=cp.array(Ez0m,dtype=cp.float64)
+    interp_pot_kernel((nblocks,),(1,),(int(ihi),int(jhi),int(num_tri),guess_min_gpu,inv_guess_d_gpu,\
+      guess_xtable_gpu,guess_list_gpu,guess_count_gpu,mapping_gpu,tri_psi,rlin_gpu,zlin_gpu,float(psix),\
+      psi2d_gpu,psi_rz_gpu,nd_gpu,int(rlin.size),int(zlin.size),int(itask1),int(itask2),int(nblocks_max),\
+      pot0_gpu,dpot_gpu,pot02d_gpu,dpot2d_gpu))
+    cp.cuda.Stream.null.synchronize()
+    if iloop==0:
+      pot02d=cp.asnumpy(pot02d_gpu).reshape((Nz,Nr),order='C')
+      dpot2d=cp.asnumpy(dpot2d_gpu).reshape((Nz,Nr),order='C')
+    elif iloop==1:
+      Er002d=cp.asnumpy(pot02d_gpu).reshape((Nz,Nr),order='C')
+      Ez002d=cp.asnumpy(dpot2d_gpu).reshape((Nz,Nr),order='C')
+    elif iloop==2:
+      Er0m2d=cp.asnumpy(pot02d_gpu).reshape((Nz,Nr),order='C')
+      Ez0m2d=cp.asnumpy(dpot2d_gpu).reshape((Nz,Nr),order='C')
   del guess_min_gpu,inv_guess_d_gpu,guess_xtable_gpu,guess_list_gpu,guess_count_gpu,mapping_gpu,\
       nd_gpu,rlin_gpu,zlin_gpu,psi2d_gpu,psi_rz_gpu,pot0_gpu,dpot_gpu,pot02d_gpu,dpot2d_gpu
   mempool = cp.get_default_memory_pool()
   pinned_mempool = cp.get_default_pinned_memory_pool()
   mempool.free_all_blocks()
   pinned_mempool.free_all_blocks()
-  return pot0fac*pot02d,dpotfac*dpot2d
+  if flag==1:
+    return pot0fac*pot02d,dpotfac*dpot2d
+  elif flag==2:
+    return pot0fac*pot02d,dpotfac*dpot2d,pot0fac*Er002d,pot0fac*Ez002d,dpotfac*Er0m2d,dpotfac*Ez0m2d

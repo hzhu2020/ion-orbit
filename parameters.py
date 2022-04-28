@@ -5,6 +5,9 @@ determine_loss=False
 #gyroaverage the electric field
 gyro_E=True
 ngyro=8
+#use XGC's grid derivatives to compute E
+grid_E=True
+if (grid_E)and(gyro_E): gyro_E=False
 #All paramers are in mks unit except Ti
 qi=1.60217662E-19#ion charge
 mi=2*1.67262192369E-27#ion mass
@@ -51,6 +54,7 @@ def write_parameters(output):
   import numpy as np
   output.write_attribute('determine_loss',np.array(1*determine_loss))
   output.write_attribute('gyro_E',np.array(1*gyro_E))
+  output.write_attribute('grid_E',np.array(1*grid_E))
   output.write_attribute('ngyro',np.array(ngyro))
   output.write_attribute('qi',np.array(qi))
   output.write_attribute('mi',np.array(mi))
