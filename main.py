@@ -23,6 +23,9 @@ try:
 except:
   use_gpu=False
 
+if gyro_E:
+  if rank==0: print('gyro_E must be set to False for this version. Exiting...')
+  exit()
 #initialize some global variables
 vt=np.sqrt(1.60217662E-19*Ti/mi) #thermal speed
 t_beg=time.time()

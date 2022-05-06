@@ -1,5 +1,5 @@
 import numpy as np
-from parameters import interp_method,gyro_E,grid_E,dpot_fourier_maxm
+from parameters import interp_method,gyro_E,dpot_fourier_maxm
 from scipy.interpolate import griddata,interp1d
 from scipy.signal import find_peaks
 import math
@@ -70,30 +70,22 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
     itask1=itask1[rank]
     itask2=itask2[rank]
     setup.Pot_init(rank)
-    if grid_E:
-      setup.grid_deriv_init()
-      inode1,inode2,_=simple_partition(comm,setup.nnode,size)
-      inode1=inode1[rank]
-      inode2=inode2[rank]
-      setup.get_grid_E(inode1,inode2,comm,summation)
-      if use_gpu:
-        pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,2)
-      else:
-        pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,2)
-      #end if use_gpu
+    setup.grid_deriv_init()
+    inode1,inode2,_=simple_partition(comm,setup.nnode,size)
+    inode1=inode1[rank]
+    inode2=inode2[rank]
+    setup.get_grid_E(inode1,inode2,comm,summation)
+    if use_gpu:
+      pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,2)
     else:
-      if use_gpu:
-        pot0,dpot=setup.Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,1)
-      else:
-        pot0,dpot=setup.Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,1)
-    #end if grid_E
+      pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,2)
+    #end if use_gpu
     pot0=comm.allreduce(pot0,op=summation)
     dpot=comm.allreduce(dpot,op=summation)
-    if grid_E:
-      Er00=comm.allreduce(Er00,op=summation)
-      Ez00=comm.allreduce(Ez00,op=summation)
-      Er0m=comm.allreduce(Er0m,op=summation)
-      Ez0m=comm.allreduce(Ez0m,op=summation)
+    Er00=comm.allreduce(Er00,op=summation)
+    Ez00=comm.allreduce(Ez00,op=summation)
+    Er0m=comm.allreduce(Er0m,op=summation)
+    Ez0m=comm.allreduce(Ez0m,op=summation)
   else:
     pot0=np.zeros((Nz,Nr),dtype=float)
     dpot=np.zeros((Nz,Nr),dtype=float)
@@ -118,15 +110,6 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
 
   Ephi00=np.zeros((Nz,Nr),dtype=float)
   Ephi0m=np.zeros((Nz,Nr),dtype=float)
-  if (not grid_E):
-    Er00,Ez00,Ephi00=setup.Grad(rlin,zlin,pot0,Nr,Nz)
-    Er00=-Er00
-    Ez00=-Ez00
-    Ephi00=-Ephi00
-    Er0m,Ez0m,Ephi0m=setup.Grad(rlin,zlin,dpot,Nr,Nz)
-    Er0m=-Er0m
-    Ez0m=-Ez0m
-    Ephi0m=-Ephi0m
 
   if (not gyro_E):
     global imu1
