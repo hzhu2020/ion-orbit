@@ -77,13 +77,12 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
     setup.get_grid_E(inode1,inode2,comm,summation)
     if use_gpu:
       setup.node_to_2d_init_gpu(itask1,itask2,rlin,zlin)
-      pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,2)
     else:
       setup.node_to_2d_init(itask1,itask2,rlin,zlin)
-      pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,2)
     #end if use_gpu
-    pot0=comm.allreduce(pot0,op=summation)
-    dpot=comm.allreduce(dpot,op=summation)
+    pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.efields(rlin,zlin,itask1,itask2,use_gpu)
+    pot0=comm.allreduce(pot0fac*pot0,op=summation)
+    dpot=comm.allreduce(dpotfac*dpot,op=summation)
     Er00=comm.allreduce(Er00,op=summation)
     Ez00=comm.allreduce(Ez00,op=summation)
     Er0m=comm.allreduce(Er0m,op=summation)

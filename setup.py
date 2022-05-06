@@ -382,16 +382,27 @@ def node_to_2d_init_gpu(itask1,itask2,rlin,zlin):
 
   return
 
-def Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,flag):
+def efields(rlin,zlin,itask1,itask2,use_gpu):
+  if use_gpu:
+    pot002d=node_to_2d_gpu(pot0,rlin,zlin,itask1,itask2)
+    dpot2d=node_to_2d_gpu(dpot,rlin,zlin,itask1,itask2)
+    Er002d=node_to_2d_gpu(Er00,rlin,zlin,itask1,itask2)
+    Ez002d=node_to_2d_gpu(Ez00,rlin,zlin,itask1,itask2)
+    Er0m2d=node_to_2d_gpu(Er0m,rlin,zlin,itask1,itask2)
+    Ez0m2d=node_to_2d_gpu(Ez0m,rlin,zlin,itask1,itask2)
+  else:
+    pot002d=node_to_2d_cpu(pot0,rlin,zlin,itask1,itask2)
+    dpot2d=node_to_2d_cpu(dpot,rlin,zlin,itask1,itask2)
+    Er002d=node_to_2d_cpu(Er00,rlin,zlin,itask1,itask2)
+    Ez002d=node_to_2d_cpu(Ez00,rlin,zlin,itask1,itask2)
+    Er0m2d=node_to_2d_cpu(Er0m,rlin,zlin,itask1,itask2)
+    Ez0m2d=node_to_2d_cpu(Ez0m,rlin,zlin,itask1,itask2)
+  return pot002d,dpot2d,Er002d,Ez002d,Er0m2d,Ez0m2d
+  
+def node_to_2d_cpu(fld,rlin,zlin,itask1,itask2):
   Nr=np.size(rlin)
   Nz=np.size(zlin)
-  pot02d=np.zeros((Nz,Nr),dtype=float)
-  dpot2d=np.zeros((Nz,Nr),dtype=float)
-  if flag==2:
-    Er002d=np.zeros((Nz,Nr),dtype=float)
-    Ez002d=np.zeros((Nz,Nr),dtype=float)
-    Er0m2d=np.zeros((Nz,Nr),dtype=float)
-    Ez0m2d=np.zeros((Nz,Nr),dtype=float)
+  fld2d=np.zeros((Nz,Nr),dtype=float)
   for itask in range(itask1,itask2+1):
     iz=int(itask/Nr)
     ir=int(itask-iz*Nr)
@@ -402,25 +413,11 @@ def Pot_cpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,flag):
       #if(max(p)<1.0): p=t_coeff_mod([rlin[ir],zlin[iz]],itr,p,psi2d[iz,ir],psix)
       for i in range(3):
         node=nd[i,itr-1]
-        pot02d[iz,ir]=pot02d[iz,ir]+p[i]*pot0[node-1]
-        dpot2d[iz,ir]=dpot2d[iz,ir]+p[i]*dpot[node-1]
-        if flag==2:
-          Er002d[iz,ir]=Er002d[iz,ir]+p[i]*Er00[node-1]
-          Ez002d[iz,ir]=Ez002d[iz,ir]+p[i]*Ez00[node-1]
-          Er0m2d[iz,ir]=Er0m2d[iz,ir]+p[i]*Er0m[node-1]
-          Ez0m2d[iz,ir]=Ez0m2d[iz,ir]+p[i]*Ez0m[node-1]
+        fld2d[iz,ir]=fld2d[iz,ir]+p[i]*fld[node-1]
     else:
-      pot02d[iz,ir]=np.nan
-      dpot2d[iz,ir]=np.nan
-      if flag==2:
-        Er002d[iz,ir]=np.nan
-        Ez002d[iz,ir]=np.nan
-        Er0m2d[iz,ir]=np.nan
-        Ez0m2d[iz,ir]=np.nan
-  if flag==1:
-    return pot0fac*pot02d,dpotfac*dpot2d
-  elif flag==2:
-    return pot0fac*pot02d,dpotfac*dpot2d,pot0fac*Er002d,pot0fac*Ez002d,dpotfac*Er0m2d,dpotfac*Ez0m2d
+      fld2d[iz,ir]=np.nan
+
+  return fld2d
 
 def search_tr2(xy):
    itr=-1
@@ -473,12 +470,12 @@ def t_coeff_mod(xy,itr,p,psi_in,psix):
     p[b-1]=p_temp*p[b-1]/t_temp
   return p
 
-def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,flag):
+def node_to_2d_gpu(fld,rlin,zlin,itask1,itask2):
   import cupy as cp
   interp_pot_kernel = cp.RawKernel(r'''
   extern "C" __global__
   void interp_pot(int num_tri,int Nr,int Nz,int itask1,int itask2,int nblocks_max,int* itr_save,double* p_save,\
-      int* nd,double* pot0,double* dpot,double* pot02d,double* dpot2d) 
+      int* nd,double* fld,double* fld2d) 
   {
       double p[3]; 
       int itask,iz,ir,node,itr;
@@ -494,12 +491,10 @@ def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,flag):
           p[2]=p_save[3*(itask-itask1)+2];
           for(int k=0;k<3;k++){
             node=nd[k*num_tri+itr-1];
-            pot02d[itask]=pot02d[itask]+p[k]*pot0[node-1];
-            dpot2d[itask]=dpot2d[itask]+p[k]*dpot[node-1];
+            fld2d[itask]=fld2d[itask]+p[k]*fld[node-1];
           }
         }else{
-          pot02d[itask]=nan("");
-          dpot2d[itask]=nan("");
+          fld2d[itask]=nan("");
         }
         itask=itask+nblocks_max;
       }
@@ -515,42 +510,15 @@ def Pot_gpu(rlin,zlin,pot0fac,dpotfac,psi2d,psix,itask1,itask2,flag):
   p_save_gpu=cp.array(p_save).ravel(order='C')
   nd_gpu=cp.array(nd,dtype=cp.int32).ravel(order='C')
   num_tri=np.shape(mapping)[2]
-  if flag==1:
-    nloops=1
-  elif flag==2:
-    nloops=3
-  for iloop in range(nloops):
-    #reset them to zero for each loop
-    pot02d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
-    dpot2d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
-    if iloop==0:
-      pot0_gpu=cp.array(pot0,dtype=cp.float64)
-      dpot_gpu=cp.array(dpot,dtype=cp.float64)
-    elif iloop==1:
-      pot0_gpu=cp.array(Er00,dtype=cp.float64)
-      dpot_gpu=cp.array(Ez00,dtype=cp.float64)
-    elif iloop==2:
-      pot0_gpu=cp.array(Er0m,dtype=cp.float64)
-      dpot_gpu=cp.array(Ez0m,dtype=cp.float64)
-    interp_pot_kernel((nblocks,),(1,),(int(num_tri),int(rlin.size),int(zlin.size),int(itask1),int(itask2),\
-      int(nblocks_max),itr_save_gpu,p_save_gpu,nd_gpu,pot0_gpu,dpot_gpu,pot02d_gpu,dpot2d_gpu))
-    cp.cuda.Stream.null.synchronize()
-    if iloop==0:
-      pot02d=cp.asnumpy(pot02d_gpu).reshape((Nz,Nr),order='C')
-      dpot2d=cp.asnumpy(dpot2d_gpu).reshape((Nz,Nr),order='C')
-    elif iloop==1:
-      Er002d=cp.asnumpy(pot02d_gpu).reshape((Nz,Nr),order='C')
-      Ez002d=cp.asnumpy(dpot2d_gpu).reshape((Nz,Nr),order='C')
-    elif iloop==2:
-      Er0m2d=cp.asnumpy(pot02d_gpu).reshape((Nz,Nr),order='C')
-      Ez0m2d=cp.asnumpy(dpot2d_gpu).reshape((Nz,Nr),order='C')
-
-  del nd_gpu,pot0_gpu,dpot_gpu,pot02d_gpu,dpot2d_gpu
+  fld2d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
+  fld_gpu=cp.array(fld,dtype=cp.float64)
+  interp_pot_kernel((nblocks,),(1,),(int(num_tri),int(rlin.size),int(zlin.size),int(itask1),int(itask2),\
+      int(nblocks_max),itr_save_gpu,p_save_gpu,nd_gpu,fld_gpu,fld2d_gpu))
+  cp.cuda.Stream.null.synchronize()
+  fld2d=cp.asnumpy(fld2d_gpu).reshape((Nz,Nr),order='C')
+  del nd_gpu,itr_save_gpu,p_save_gpu,fld2d_gpu,fld_gpu
   mempool = cp.get_default_memory_pool()
   pinned_mempool = cp.get_default_pinned_memory_pool()
   mempool.free_all_blocks()
   pinned_mempool.free_all_blocks()
-  if flag==1:
-    return pot0fac*pot02d,dpotfac*dpot2d
-  elif flag==2:
-    return pot0fac*pot02d,dpotfac*dpot2d,pot0fac*Er002d,pot0fac*Ez002d,dpotfac*Er0m2d,dpotfac*Ez0m2d
+  return fld2d
