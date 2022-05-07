@@ -228,25 +228,26 @@ def get_grid_E(inode1,inode2,comm,summation):
   Ez0m=comm.allreduce(Ez0m,op=summation)
   return
 
-def node_to_2d_init(itask1,itask2,rlin,zlin):
+def node_to_2d_init(comm,summation,itask1,itask2,rlin,zlin):
   Nr=np.size(rlin)
   Nz=np.size(zlin)
   global itr_save,p_save
-  ntasks=itask2-itask1+1
-  itr_save=np.zeros((ntasks,1),dtype=int)
-  p_save=np.zeros((ntasks,3),dtype=float)
+  itr_save=np.zeros((Nr*Nz,1),dtype=int)
+  p_save=np.zeros((Nr*Nz,3),dtype=float)
   for itask in range(itask1,itask2+1):
     iz=int(itask/Nr)
     ir=int(itask-iz*Nr)
     itr,p=search_tr2([rlin[ir],zlin[iz]])
     if (itr>0):
-      itr_save[itask-itask1]=itr
-      p_save[itask-itask1,:]=p[:]
+      itr_save[itask]=itr
+      p_save[itask,:]=p[:]
     else:
-      itr_save[itask-itask1]=-1
+      itr_save[itask]=-1
+  itr_save=comm.allreduce(itr_save,op=summation)
+  p_save=comm.allreduce(p_save,op=summation)
   return
 
-def node_to_2d_init_gpu(itask1,itask2,rlin,zlin):
+def node_to_2d_init_gpu(comm,summation,itask1,itask2,rlin,zlin):
   import cupy as cp
   node_to_2d_kernel = cp.RawKernel(r'''
   extern "C" __device__    
@@ -339,14 +340,14 @@ def node_to_2d_init_gpu(itask1,itask2,rlin,zlin):
         r=rlin[ir];
         z=zlin[iz];
         search_tr2(r,z,itr,p,ihi,jhi,num_tri,guess_min,inv_guess_d,guess_xtable,guess_list,guess_count,mapping);
-       if (itr[0]>0){
-         itr_save[itask-itask1]=itr[0];
-         p_save[3*(itask-itask1)+0]=p[0];
-         p_save[3*(itask-itask1)+1]=p[1];
-         p_save[3*(itask-itask1)+2]=p[2];
-       }else{
-         itr_save[itask-itask1]=-1;
-       }
+        if (itr[0]>0){
+          itr_save[itask]=itr[0];
+          p_save[3*itask+0]=p[0];
+          p_save[3*itask+1]=p[1];
+          p_save[3*itask+2]=p[2];
+        }else{
+          itr_save[itask]=-1;
+        }
         itask=itask+nblocks_max;
       }
 
@@ -359,8 +360,8 @@ def node_to_2d_init_gpu(itask1,itask2,rlin,zlin):
   nblocks_max=4096
   ntasks=itask2-itask1+1
   nblocks=min(nblocks_max,ntasks)
-  itr_save_gpu=cp.zeros((ntasks,),dtype=cp.int32)
-  p_save_gpu=cp.zeros((ntasks*3,),dtype=cp.float64)
+  itr_save_gpu=cp.zeros((Nr*Nz,),dtype=cp.int32)
+  p_save_gpu=cp.zeros((Nr*Nz*3,),dtype=cp.float64)
   num_tri=np.shape(mapping)[2]
   ihi,jhi=np.shape(guess_table)
   guess_min_gpu=cp.array(guess_min,dtype=cp.float64)
@@ -376,7 +377,9 @@ def node_to_2d_init_gpu(itask1,itask2,rlin,zlin):
     guess_xtable_gpu,guess_list_gpu,guess_count_gpu,mapping_gpu,rlin_gpu,zlin_gpu,nd_gpu,\
     int(rlin.size),int(zlin.size),int(itask1),int(itask2),int(nblocks_max),itr_save_gpu,p_save_gpu))
   itr_save=cp.asnumpy(itr_save_gpu)
-  p_save=cp.asnumpy(p_save_gpu).reshape((ntasks,3),order='C')
+  p_save=cp.asnumpy(p_save_gpu).reshape((Nr*Nz,3),order='C')
+  itr_save=comm.allreduce(itr_save,op=summation)
+  p_save=comm.allreduce(p_save,op=summation)
   del guess_min_gpu,inv_guess_d_gpu,guess_xtable_gpu,guess_list_gpu,guess_count_gpu,mapping_gpu,\
       nd_gpu,rlin_gpu,zlin_gpu,itr_save_gpu,p_save_gpu
 
@@ -406,8 +409,8 @@ def node_to_2d_cpu(fld,rlin,zlin,itask1,itask2):
   for itask in range(itask1,itask2+1):
     iz=int(itask/Nr)
     ir=int(itask-iz*Nr)
-    itr=itr_save[itask-itask1]
-    p=p_save[itask-itask1,:]
+    itr=itr_save[itask]
+    p=p_save[itask,:]
     if (itr>0):
       #no need to use t_coeff_mod
       #if(max(p)<1.0): p=t_coeff_mod([rlin[ir],zlin[iz]],itr,p,psi2d[iz,ir],psix)
@@ -484,11 +487,11 @@ def node_to_2d_gpu(fld,rlin,zlin,itask1,itask2):
       {
         iz=itask/Nr;
         ir=itask-iz*Nr;
-        itr=itr_save[itask-itask1];
+        itr=itr_save[itask];
         if (itr>0){
-          p[0]=p_save[3*(itask-itask1)+0];
-          p[1]=p_save[3*(itask-itask1)+1];
-          p[2]=p_save[3*(itask-itask1)+2];
+          p[0]=p_save[3*itask+0];
+          p[1]=p_save[3*itask+1];
+          p[2]=p_save[3*itask+2];
           for(int k=0;k<3;k++){
             node=nd[k*num_tri+itr-1];
             fld2d[itask]=fld2d[itask]+p[k]*fld[node-1];

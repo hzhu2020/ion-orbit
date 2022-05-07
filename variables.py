@@ -76,9 +76,9 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
     inode2=inode2[rank]
     setup.get_grid_E(inode1,inode2,comm,summation)
     if use_gpu:
-      setup.node_to_2d_init_gpu(itask1,itask2,rlin,zlin)
+      setup.node_to_2d_init_gpu(comm,summation,itask1,itask2,rlin,zlin)
     else:
-      setup.node_to_2d_init(itask1,itask2,rlin,zlin)
+      setup.node_to_2d_init(comm,summation,itask1,itask2,rlin,zlin)
     #end if use_gpu
     pot0,dpot,Er00,Ez00,Er0m,Ez0m=setup.efields(rlin,zlin,itask1,itask2,use_gpu)
     pot0=comm.allreduce(pot0fac*pot0,op=summation)
