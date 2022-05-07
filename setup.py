@@ -386,26 +386,24 @@ def node_to_2d_init_gpu(comm,summation,itask1,itask2,rlin,zlin):
   return
 
 def efields(rlin,zlin,itask1,itask2,use_gpu):
+  tmp=np.zeros((nnode,6),dtype=float)
+  tmp[:,0]=pot0[:]
+  tmp[:,1]=dpot[:]
+  tmp[:,2]=Er00[:]
+  tmp[:,3]=Ez00[:]
+  tmp[:,4]=Er0m[:]
+  tmp[:,5]=Ez0m[:]
   if use_gpu:
-    pot002d=node_to_2d_gpu(pot0,rlin,zlin,itask1,itask2)
-    dpot2d=node_to_2d_gpu(dpot,rlin,zlin,itask1,itask2)
-    Er002d=node_to_2d_gpu(Er00,rlin,zlin,itask1,itask2)
-    Ez002d=node_to_2d_gpu(Ez00,rlin,zlin,itask1,itask2)
-    Er0m2d=node_to_2d_gpu(Er0m,rlin,zlin,itask1,itask2)
-    Ez0m2d=node_to_2d_gpu(Ez0m,rlin,zlin,itask1,itask2)
+    tmp2d=node_to_2d_gpu(tmp,rlin,zlin,itask1,itask2)
   else:
-    pot002d=node_to_2d_cpu(pot0,rlin,zlin,itask1,itask2)
-    dpot2d=node_to_2d_cpu(dpot,rlin,zlin,itask1,itask2)
-    Er002d=node_to_2d_cpu(Er00,rlin,zlin,itask1,itask2)
-    Ez002d=node_to_2d_cpu(Ez00,rlin,zlin,itask1,itask2)
-    Er0m2d=node_to_2d_cpu(Er0m,rlin,zlin,itask1,itask2)
-    Ez0m2d=node_to_2d_cpu(Ez0m,rlin,zlin,itask1,itask2)
-  return pot002d,dpot2d,Er002d,Ez002d,Er0m2d,Ez0m2d
+    tmp2d=node_to_2d_cpu(tmp,rlin,zlin,itask1,itask2)
+  return tmp2d[:,:,0],tmp2d[:,:,1],tmp2d[:,:,2],tmp2d[:,:,3],tmp2d[:,:,4],tmp2d[:,:,5]
   
 def node_to_2d_cpu(fld,rlin,zlin,itask1,itask2):
   Nr=np.size(rlin)
   Nz=np.size(zlin)
-  fld2d=np.zeros((Nz,Nr),dtype=float)
+  Nfld=np.shape(fld)[1]
+  fld2d=np.zeros((Nz,Nr,Nfld),dtype=float)
   for itask in range(itask1,itask2+1):
     iz=int(itask/Nr)
     ir=int(itask-iz*Nr)
@@ -416,9 +414,9 @@ def node_to_2d_cpu(fld,rlin,zlin,itask1,itask2):
       #if(max(p)<1.0): p=t_coeff_mod([rlin[ir],zlin[iz]],itr,p,psi2d[iz,ir],psix)
       for i in range(3):
         node=nd[i,itr-1]
-        fld2d[iz,ir]=fld2d[iz,ir]+p[i]*fld[node-1]
+        fld2d[iz,ir,:]=fld2d[iz,ir,:]+p[i]*fld[node-1,:]
     else:
-      fld2d[iz,ir]=np.nan
+      fld2d[iz,ir,:]=np.nan
 
   return fld2d
 
@@ -478,11 +476,12 @@ def node_to_2d_gpu(fld,rlin,zlin,itask1,itask2):
   interp_pot_kernel = cp.RawKernel(r'''
   extern "C" __global__
   void interp_pot(int num_tri,int Nr,int Nz,int itask1,int itask2,int nblocks_max,int* itr_save,double* p_save,\
-      int* nd,double* fld,double* fld2d) 
+      int* nd,double* fld,double* fld2d,int Nfld) 
   {
       double p[3]; 
-      int itask,iz,ir,node,itr;
+      int itask,ifld,iz,ir,node,itr;
       itask=blockIdx.x+itask1;
+      ifld=threadIdx.x;
       while (itask<=itask2)
       {
         iz=itask/Nr;
@@ -494,10 +493,10 @@ def node_to_2d_gpu(fld,rlin,zlin,itask1,itask2):
           p[2]=p_save[3*itask+2];
           for(int k=0;k<3;k++){
             node=nd[k*num_tri+itr-1];
-            fld2d[itask]=fld2d[itask]+p[k]*fld[node-1];
+            fld2d[itask*Nfld+ifld]=fld2d[itask*Nfld+ifld]+p[k]*fld[(node-1)*Nfld+ifld];
           }
         }else{
-          fld2d[itask]=nan("");
+          fld2d[itask*Nfld+ifld]=nan("");
         }
         itask=itask+nblocks_max;
       }
@@ -506,6 +505,7 @@ def node_to_2d_gpu(fld,rlin,zlin,itask1,itask2):
   ''', 'interp_pot')
   Nr=np.size(rlin)
   Nz=np.size(zlin)
+  Nfld=np.shape(fld)[1]
   nblocks_max=4096
   ntasks=itask2-itask1+1
   nblocks=min(nblocks_max,ntasks)
@@ -513,12 +513,12 @@ def node_to_2d_gpu(fld,rlin,zlin,itask1,itask2):
   p_save_gpu=cp.array(p_save).ravel(order='C')
   nd_gpu=cp.array(nd,dtype=cp.int32).ravel(order='C')
   num_tri=np.shape(mapping)[2]
-  fld2d_gpu=cp.zeros((Nz*Nr,),dtype=cp.float64)
-  fld_gpu=cp.array(fld,dtype=cp.float64)
-  interp_pot_kernel((nblocks,),(1,),(int(num_tri),int(rlin.size),int(zlin.size),int(itask1),int(itask2),\
-      int(nblocks_max),itr_save_gpu,p_save_gpu,nd_gpu,fld_gpu,fld2d_gpu))
+  fld2d_gpu=cp.zeros((Nz*Nr*Nfld,),dtype=cp.float64)
+  fld_gpu=cp.array(fld,dtype=cp.float64).ravel(order='C')
+  interp_pot_kernel((nblocks,),(Nfld,),(int(num_tri),int(rlin.size),int(zlin.size),int(itask1),int(itask2),\
+      int(nblocks_max),itr_save_gpu,p_save_gpu,nd_gpu,fld_gpu,fld2d_gpu,int(Nfld)))
   cp.cuda.Stream.null.synchronize()
-  fld2d=cp.asnumpy(fld2d_gpu).reshape((Nz,Nr),order='C')
+  fld2d=cp.asnumpy(fld2d_gpu).reshape((Nz,Nr,Nfld),order='C')
   del nd_gpu,itr_save_gpu,p_save_gpu,fld2d_gpu,fld_gpu
   mempool = cp.get_default_memory_pool()
   pinned_mempool = cp.get_default_pinned_memory_pool()
