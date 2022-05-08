@@ -28,7 +28,7 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
   rank=comm.Get_rank()
   size=comm.Get_size()
   #read mesh
-  global rlin,zlin,R,Z,psi2d,psi_surf,psix,Ra,Ba,rsurf,zsurf,theta,dist,zx
+  global rz,rlin,zlin,R,Z,psi2d,psi_surf,psix,Ra,Ba,rsurf,zsurf,theta,dist,zx
   if rank==0:
     rz,psi_rz,rx,zx,psi_surf,psix,Ba,rsurf,zsurf,theta,dist=setup.Grid(Nr,Nz)
   else:
@@ -90,6 +90,10 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
   else:
     pot0=np.zeros((Nz,Nr),dtype=float)
     dpot=np.zeros((Nz,Nr),dtype=float)
+    Er00=np.zeros((Nz,Nr),dtype=float)
+    Ez00=np.zeros((Nz,Nr),dtype=float)
+    Er0m=np.zeros((Nz,Nr),dtype=float)
+    Ez0m=np.zeros((Nz,Nr),dtype=float)
   #pin the starting node of the surface at the top or bottom
   if Bphi[math.floor(Nz/2),math.floor(Nr/2)]>0:
     theta0=+np.pi/2
@@ -117,173 +121,33 @@ def init(pot0fac,dpotfac,Nr,Nz,comm,summation,use_gpu):
     imu1=0
   return
 
-def gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac,iorb1,iorb2):
-  import cupy as cp
-  gyro_pot_kernel=cp.RawKernel(r'''
-  extern "C" __global__
-  void gyro_pot(double mu,double* Bmag,double* rlin,double* zlin,double* pot0,double* dpot,\
-       double* gyropot0,double* gyrodpot,double mi,double qi,int Nz,int Nr,int ngyro)
-  {
-    int iz,ir,igyro,idx,ir1,iz1;
-    double B, r, z, rho, angle, r1, z1, tmp1, tmp2;
-    double r0,z0,dr,dz,wr,wz;
-    r0=rlin[0];
-    z0=zlin[0];
-    dr=rlin[1]-rlin[0];
-    dz=zlin[1]-zlin[0];
-    iz=blockIdx.x;
-    ir=threadIdx.x;
-    while (ir<Nr){
-      idx=iz*Nr+ir;
-      B=Bmag[idx];
-      r=rlin[ir];
-      z=zlin[iz];
-      if (isnan(B)){
-        gyropot0[idx]=nan("");
-        gyrodpot[idx]=nan("");
-        ir=ir+blockDim.x;
-        continue;
-      }
-      gyropot0[idx]=0.0;
-      gyrodpot[idx]=0.0;
-      rho=sqrt(2*mi*mu/B/qi/qi);
-      for (igyro=0;igyro<ngyro;igyro++){
-        angle=8.*atan(1.)*double(igyro)/double(ngyro);
-        r1=r+rho*cos(angle);
-        z1=z+rho*sin(angle);
-        ir1=floor((r1-r0)/dr);
-        iz1=floor((z1-z0)/dz);
-        wr=(r1-r0)/dr-ir1;
-        wz=(z1-z0)/dz-iz1;
-        if ((ir1<0)||(ir1>Nr-2)||(iz1<0)||(iz1>Nz-2)){
-          tmp1=nan("");
-          tmp2=nan("");
-        }else{
-          tmp1=pot0[iz1*Nr+ir1]*(1-wz)*(1-wr)+pot0[(iz1+1)*Nr+ir1]*wz*(1-wr)\
-              +pot0[iz1*Nr+ir1+1]*(1-wz)*wr+pot0[(iz1+1)*Nr+ir1+1]*wz*wr;
-          tmp2=dpot[iz1*Nr+ir1]*(1-wz)*(1-wr)+dpot[(iz1+1)*Nr+ir1]*wz*(1-wr)\
-              +dpot[iz1*Nr+ir1+1]*(1-wz)*wr+dpot[(iz1+1)*Nr+ir1+1]*wz*wr;
-        } 
-        gyropot0[idx]+=tmp1/double(ngyro);
-        gyrodpot[idx]+=tmp2/double(ngyro);
-      }
-      ir=ir+blockDim.x;
-    }
-  }
-  ''','gyro_pot')
-
-  global gyropot0,gyrodpot
-  Nz,Nr=np.shape(Er00)
-  nthreads=min(Nr,1024)
-  global imu1,imu2
-  from parameters import nPphi,nH
+def gyroE(comm,summation,mu_arr,qi,mi,ngyro,iorb1,iorb2,use_gpu):
+  #determine local range of mu
+  global imu1,imu2,gyropot0,gyrodpot,gyroEr00,gyroEz00,gyroEr0m,gyroEz0m
+  from parameters import nmu,nPphi,nH
   imu1=int(iorb1/(nPphi*nH))
   imu2=int(iorb2/(nPphi*nH))
-  Nmu_l=imu2-imu1+1
-  gyropot0=np.zeros((Nz,Nr,Nmu_l),dtype=float)
-  gyrodpot=np.zeros((Nz,Nr,Nmu_l),dtype=float)
-  if (pot0fac==0)and(dpotfac==0): return
-  Bmag_gpu=cp.asarray(Bmag,dtype=cp.float64).ravel(order='C')
-  rlin_gpu=cp.asarray(rlin,dtype=cp.float64)
-  zlin_gpu=cp.asarray(zlin,dtype=cp.float64)
-  pot0_gpu=cp.asarray(pot0,dtype=cp.float64).ravel(order='C')
-  dpot_gpu=cp.asarray(dpot,dtype=cp.float64).ravel(order='C')
-  gyropot0_gpu=cp.zeros((Nz*Nr),dtype=cp.float64)
-  gyrodpot_gpu=cp.zeros((Nz*Nr),dtype=cp.float64)
-  for imu in range(Nmu_l):
-    mu=mu_arr[imu+imu1]
-    gyro_pot_kernel((Nz,),(nthreads,),(mu,Bmag_gpu,rlin_gpu,zlin_gpu,pot0_gpu,dpot_gpu,\
-                          gyropot0_gpu,gyrodpot_gpu,mi,qi,int(Nz),int(Nr),int(ngyro)))
-    gyropot0[:,:,imu]=cp.asnumpy(gyropot0_gpu).reshape((Nz,Nr),order='C')
-    gyrodpot[:,:,imu]=cp.asnumpy(gyrodpot_gpu).reshape((Nz,Nr),order='C')
   
-  comm.barrier()#just to avoid accidental deletion before completion
-  del Bmag_gpu,rlin_gpu,zlin_gpu,pot0_gpu,dpot_gpu,gyropot0_gpu,gyrodpot_gpu
-  mempool = cp.get_default_memory_pool()
-  pinned_mempool = cp.get_default_pinned_memory_pool()
-  mempool.free_all_blocks()
-  pinned_mempool.free_all_blocks()
-  return 
-
-def gyropot(comm,mu_arr,qi,mi,ngyro,summation,pot0fac,dpotfac):
-  global gyropot0,gyrodpot
-  Nz,Nr=np.shape(Er00)
-  Nmu=np.size(mu_arr)
   rank=comm.Get_rank()
   size=comm.Get_size()
-  #parition in (r,z,mu) just like the orbit partitioning
-  itask1,itask2,ntasks_list=simple_partition(comm,Nr*Nz*Nmu,size)
-  itask1=itask1[rank]
-  itask2=itask2[rank]
-  #determine local range of mu
-  global imu1,imu2
-  iz=int(itask1/(Nr*Nmu))
-  ir=int((itask1-iz*Nr*Nmu)/Nmu)
-  imu1=itask1-iz*Nr*Nmu-ir*Nmu
-  iz=int(itask2/(Nr*Nmu))
-  ir=int((itask2-iz*Nr*Nmu)/Nmu)
-  imu2=itask2-iz*Nr*Nmu-ir*Nmu
-  Nmu_l=imu2-imu1+1
-
-  dr=rlin[1]-rlin[0]
-  dz=zlin[1]-zlin[0]
-  r0=rlin[0]
-  z0=zlin[0]
-  gyropot0=np.zeros((Nz,Nr,Nmu_l),dtype=float)
-  gyrodpot=np.zeros((Nz,Nr,Nmu_l),dtype=float)
-  if (pot0fac==0)and(dpotfac==0): return
-  for itask in range(itask1,itask2+1):
-    iz=int(itask/(Nr*Nmu))
-    ir=int((itask-iz*Nr*Nmu)/Nmu)
-    imu=itask-iz*Nr*Nmu-ir*Nmu
-    mu=mu_arr[imu]
-    B=Bmag[iz,ir]
-    r=rlin[ir]
-    z=zlin[iz]
-    if np.isnan(B):
-      gyropot0[iz,ir,imu-imu1]=np.nan
-      gyrodpot[iz,ir,imu-imu1]=np.nan
-      continue
-    rho=np.sqrt(2*mi*mu/B/qi**2)
-    gyropot0[iz,ir,imu-imu1]=0.0
-    gyrodpot[iz,ir,imu-imu1]=0.0
-    for igyro in range(ngyro):
-      angle=2*np.pi*float(igyro)/float(ngyro)
-      r1=r+rho*np.cos(angle)
-      z1=z+rho*np.sin(angle)
-      ir1=math.floor((r1-r0)/dr)
-      wr=(r1-r0)/dr-ir1
-      iz1=math.floor((z1-z0)/dz)
-      wz=(z1-z0)/dz-iz1
-      if (ir1<0) or (ir1>Nr-2) or (iz1<0) or (iz1>Nz-2):
-        gyropot0[iz,ir,imu-imu1]=np.nan
-        gyrodpot[iz,ir,imu-imu1]=np.nan
-        tmp1=np.nan
-        tmp2=np.nan
-      else:
-        tmp1=pot0[iz1,ir1]*(1-wz)*(1-wr) + pot0[iz1+1,ir1]*wz*(1-wr)\
-            +pot0[iz1,ir1+1]*(1-wz)*wr + pot0[iz1+1,ir1+1]*wz*wr
-        tmp2=dpot[iz1,ir1]*(1-wz)*(1-wr) + dpot[iz1+1,ir1]*wz*(1-wr)\
-            +dpot[iz1,ir1+1]*(1-wz)*wr + dpot[iz1+1,ir1+1]*wz*wr
-        gyropot0[iz,ir,imu-imu1]=gyropot0[iz,ir,imu-imu1]+tmp1/float(ngyro)
-        gyrodpot[iz,ir,imu-imu1]=gyrodpot[iz,ir,imu-imu1]+tmp2/float(ngyro)
-  #end for itask
-  for imu in range(Nmu):
-    if (imu>=imu1)and(imu<=imu2):
-      tmp=gyropot0[:,:,imu-imu1]
-      tmp=comm.allreduce(tmp,op=summation)
-      gyropot0[:,:,imu-imu1]=tmp
-    else:
-      tmp=np.zeros((Nz,Nr),dtype=float)
-      tmp=comm.allreduce(tmp,op=summation)
-    comm.barrier()
-    if (imu>=imu1)and(imu<=imu2):
-      tmp=gyrodpot[:,:,imu-imu1]
-      tmp=comm.allreduce(tmp,op=summation)
-      gyrodpot[:,:,imu-imu1]=tmp
-    else:
-      tmp=np.zeros((Nz,Nr),dtype=float)
-      tmp=comm.allreduce(tmp,op=summation)
+  if use_gpu:
+    setup.gyropot_gpu(mu_arr,qi,mi,ngyro,rz,imu1,imu2)
+  else:
+    itask1,itask2,ntasks_list=simple_partition(comm,setup.nnode*nmu,size)
+    itask1=itask1[rank]
+    itask2=itask2[rank]
+    setup.gyropot_cpu(comm,summation,mu_arr,qi,mi,ngyro,rz,imu1,imu2,itask1,itask2)
+  setup.get_grid_E_mu(imu1,imu2)
+  if use_gpu:
+    gyropot0,gyrodpot,gyroEr00,gyroEz00,gyroEr0m,gyroEz0m\
+          =setup.efields_mu_gpu(rlin,zlin,imu1,imu2)
+  else:
+    Nz,Nr=np.shape(Er00)
+    itask1,itask2,ntasks_list=simple_partition(comm,Nz*Nr,size)
+    itask1=itask1[rank]
+    itask2=itask2[rank]
+    gyropot0,gyrodpot,gyroEr00,gyroEz00,gyroEr0m,gyroEz0m\
+          =setup.efields_mu_cpu(comm,summation,rlin,zlin,imu1,imu2,itask1,itask2)
   return
 
 def efield(imu):
@@ -292,9 +156,8 @@ def efield(imu):
   Nz,Nr=np.shape(Er00)
   if gyro_E:
     #To avoid the dot product between b and the ungyroaveraged E00
-    myEr0m,myEz0m,myEphi0m=setup.Grad(rlin,zlin,gyropot0[:,:,imu]+gyrodpot[:,:,imu],Nr,Nz)
-    myEr0m=-myEr0m-Er00
-    myEz0m=-myEz0m-Ez00
+    myEr0m=(gyroEr00[:,:,imu]-Er00)+gyroEr0m[:,:,imu]
+    myEz0m=(gyroEz00[:,:,imu]-Ez00)+gyroEz0m[:,:,imu]
   else:
     myEr0m=Er0m
     myEz0m=Ez0m

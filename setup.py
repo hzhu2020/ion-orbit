@@ -185,47 +185,58 @@ def grid_deriv_init():
   fid.close()
   return
 
-def get_grid_E(inode1,inode2,comm,summation):
-  global Er00,Ez00,Er0m,Ez0m
-  Epsi00=np.zeros((nnode,),dtype=float)
-  Etheta00=np.zeros((nnode,),dtype=float)
-  Epsi0m=np.zeros((nnode,),dtype=float)
-  Etheta0m=np.zeros((nnode,),dtype=float)
-  Er00=np.zeros((nnode,),dtype=float)
-  Ez00=np.zeros((nnode,),dtype=float)
-  Er0m=np.zeros((nnode,),dtype=float)
-  Ez0m=np.zeros((nnode,),dtype=float)
+def grid_deriv(inode1,inode2,fld):
+  dfdpsi=np.zeros((nnode,),dtype=float)
+  dfdtheta=np.zeros((nnode,),dtype=float)
+  dfdr=np.zeros((nnode,),dtype=float)
+  dfdz=np.zeros((nnode,),dtype=float)
   for i in range(inode1,inode2+1):
     for j in range(nelement_r[i]):
       ind=eindex_r[j,i]
-      Epsi00[i]=Epsi00[i]+pot0[ind-1]*value_r[j,i]
-      Epsi0m[i]=Epsi0m[i]+dpot[ind-1]*value_r[j,i]
+      dfdpsi[i]=dfdpsi[i]+fld[ind-1]*value_r[j,i]
     for j in range(nelement_z[i]):
       ind=eindex_z[j,i]
-      Etheta00[i]=Etheta00[i]+pot0[ind-1]*value_z[j,i]
-      Etheta0m[i]=Etheta0m[i]+dpot[ind-1]*value_z[j,i]
-
-  Epsi00=-Epsi00
-  Etheta00=-Etheta00
-  Epsi0m=-Epsi0m
-  Etheta0m=-Etheta0m
-  for i in range(inode1,inode2+1):
+      dfdtheta[i]=dfdtheta[i]+fld[ind-1]*value_z[j,i]
     if basis[i]==1:
-      Er00[i]=Epsi00[i]
-      Ez00[i]=Etheta00[i]
-      Er0m[i]=Epsi0m[i]
-      Ez0m[i]=Etheta0m[i]
+      dfdr[i]=dfdpsi[i]
+      dfdz[i]=dfdtheta[i]
     else:
       tmp=np.sqrt(B[i,0]**2+B[i,1]**2)
-      Er00[i]=(Epsi00[i]*B[i,1]+Etheta00[i]*B[i,0])/tmp
-      Ez00[i]=(-Epsi00[i]*B[i,0]+Etheta00[i]*B[i,1])/tmp
-      Er0m[i]=(Epsi0m[i]*B[i,1]+Etheta0m[i]*B[i,0])/tmp
-      Ez0m[i]=(-Epsi0m[i]*B[i,0]+Etheta0m[i]*B[i,1])/tmp
+      dfdr[i]=(dfdpsi[i]*B[i,1]+dfdtheta[i]*B[i,0])/tmp
+      dfdz[i]=(-dfdpsi[i]*B[i,0]+dfdtheta[i]*B[i,1])/tmp
+
+  return dfdr,dfdz
+
+def get_grid_E(inode1,inode2,comm,summation):
+  global Er00,Ez00,Er0m,Ez0m
+  
+  Er00,Ez00=grid_deriv(inode1,inode2,pot0)
+  Er00=-Er00
+  Ez00=-Ez00
+  Er0m,Ez0m=grid_deriv(inode1,inode2,dpot)
+  Er0m=-Er0m
+  Ez0m=-Ez0m
 
   Er00=comm.allreduce(Er00,op=summation)
   Ez00=comm.allreduce(Ez00,op=summation)
   Er0m=comm.allreduce(Er0m,op=summation)
   Ez0m=comm.allreduce(Ez0m,op=summation)
+  return
+
+def get_grid_E_mu(imu1,imu2):
+  global gyroEr00,gyroEz00,gyroEr0m,gyroEz0m
+  nmu_l=imu2-imu1+1
+  gyroEr00=np.zeros((nnode,nmu_l),dtype=float)
+  gyroEz00=np.zeros((nnode,nmu_l),dtype=float)
+  gyroEr0m=np.zeros((nnode,nmu_l),dtype=float)
+  gyroEz0m=np.zeros((nnode,nmu_l),dtype=float)
+  for imu in range(imu1,imu2+1):
+    gyroEr00[:,imu-imu1],gyroEz00[:,imu-imu1]=grid_deriv(0,nnode-1,gyropot0[:,imu-imu1])
+    gyroEr0m[:,imu-imu1],gyroEz0m[:,imu-imu1]=grid_deriv(0,nnode-1,gyrodpot[:,imu-imu1])
+  gyroEr00=-gyroEr00
+  gyroEz00=-gyroEz00
+  gyroEr0m=-gyroEr0m
+  gyroEz0m=-gyroEz0m
   return
 
 def node_to_2d_init(comm,summation,itask1,itask2,rlin,zlin):
@@ -399,6 +410,73 @@ def efields(rlin,zlin,itask1,itask2,use_gpu):
     tmp2d=node_to_2d_cpu(tmp,rlin,zlin,itask1,itask2)
   return tmp2d[:,:,0],tmp2d[:,:,1],tmp2d[:,:,2],tmp2d[:,:,3],tmp2d[:,:,4],tmp2d[:,:,5]
   
+def efields_mu_cpu(comm,summation,rlin,zlin,imu1,imu2,itask1,itask2):
+  from parameters import nmu
+  Nr=np.size(rlin)
+  Nz=np.size(zlin)
+  nmu_l=imu2-imu1+1
+  gyropot02d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyrodpot2d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEr002d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEz002d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEr0m2d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEz0m2d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  for imu in range(nmu):
+    tmp=np.zeros((nnode,6),dtype=float)
+    count=np.zeros((6,),dtype=float)
+    if (imu1<=imu)and(imu<=imu2):
+      tmp[:,0]=gyropot0[:,imu-imu1]
+      tmp[:,1]=gyrodpot[:,imu-imu1]
+      tmp[:,2]=gyroEr00[:,imu-imu1]
+      tmp[:,3]=gyroEz00[:,imu-imu1]
+      tmp[:,4]=gyroEr0m[:,imu-imu1]
+      tmp[:,5]=gyroEz0m[:,imu-imu1]
+      count[:]=1.
+    tmp=comm.allreduce(tmp,op=summation)
+    count=comm.allreduce(count,op=summation)
+    tmp=tmp/count
+    tmp2d=np.zeros((Nz,Nr,6),dtype=float)
+    tmp2d=node_to_2d_cpu(tmp,rlin,zlin,itask1,itask2)
+    tmp2d=comm.allreduce(tmp2d,op=summation)
+    if (imu1<=imu)and(imu<=imu2):
+      gyropot02d[:,:,imu-imu1]=tmp2d[:,:,0]
+      gyrodpot2d[:,:,imu-imu1]=tmp2d[:,:,1]
+      gyroEr002d[:,:,imu-imu1]=tmp2d[:,:,2]
+      gyroEz002d[:,:,imu-imu1]=tmp2d[:,:,3]
+      gyroEr0m2d[:,:,imu-imu1]=tmp2d[:,:,4]
+      gyroEz0m2d[:,:,imu-imu1]=tmp2d[:,:,5]
+
+  return gyropot02d,gyrodpot2d,gyroEr002d,gyroEz002d,gyroEr0m2d,gyroEz0m2d
+
+def efields_mu_gpu(rlin,zlin,imu1,imu2):
+  from parameters import nmu
+  Nr=np.size(rlin)
+  Nz=np.size(zlin)
+  nmu_l=imu2-imu1+1
+  gyropot02d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyrodpot2d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEr002d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEz002d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEr0m2d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  gyroEz0m2d=np.zeros((Nz,Nr,nmu_l),dtype=float)
+  for imu in range(imu1,imu2+1):
+    tmp=np.zeros((nnode,6),dtype=float)
+    tmp[:,0]=gyropot0[:,imu-imu1]
+    tmp[:,1]=gyrodpot[:,imu-imu1]
+    tmp[:,2]=gyroEr00[:,imu-imu1]
+    tmp[:,3]=gyroEz00[:,imu-imu1]
+    tmp[:,4]=gyroEr0m[:,imu-imu1]
+    tmp[:,5]=gyroEz0m[:,imu-imu1]
+    tmp2d=node_to_2d_gpu(tmp,rlin,zlin,0,Nr*Nz-1)
+    gyropot02d[:,:,imu-imu1]=tmp2d[:,:,0]
+    gyrodpot2d[:,:,imu-imu1]=tmp2d[:,:,1]
+    gyroEr002d[:,:,imu-imu1]=tmp2d[:,:,2]
+    gyroEz002d[:,:,imu-imu1]=tmp2d[:,:,3]
+    gyroEr0m2d[:,:,imu-imu1]=tmp2d[:,:,4]
+    gyroEz0m2d[:,:,imu-imu1]=tmp2d[:,:,5]
+
+  return gyropot02d,gyrodpot2d,gyroEr002d,gyroEz002d,gyroEr0m2d,gyroEz0m2d
+ 
 def node_to_2d_cpu(fld,rlin,zlin,itask1,itask2):
   Nr=np.size(rlin)
   Nz=np.size(zlin)
@@ -525,3 +603,167 @@ def node_to_2d_gpu(fld,rlin,zlin,itask1,itask2):
   mempool.free_all_blocks()
   pinned_mempool.free_all_blocks()
   return fld2d
+
+def gyropot_cpu(comm,summation,mu_arr,qi,mi,ngyro,rz,imu1,imu2,itask1,itask2):
+  from parameters import nmu
+  global gyropot0,gyrodpot
+  nmu_l=imu2-imu1+1
+  gyropot0=np.zeros((nnode,nmu_l),dtype=float)
+  gyrodpot=np.zeros((nnode,nmu_l),dtype=float)
+  ntasks=itask2-itask1+1
+  gyropot0_l=np.zeros((ntasks,),dtype=float)
+  gyrodpot_l=np.zeros((ntasks,),dtype=float)
+  Bmag=np.sqrt(B[:,0]**2+B[:,1]**2+B[:,2]**2)
+  for itask in range(itask1,itask2+1):
+    imu=int(itask/nnode)
+    inode=itask-imu*nnode
+    mu=mu_arr[imu]
+    rho=np.sqrt(2*mi*mu/Bmag[inode]/qi**2)
+    for igyro in range(ngyro):
+      angle=2*np.pi*float(igyro)/float(ngyro)
+      r1=rz[inode,0]+rho*np.cos(angle)
+      z1=rz[inode,1]+rho*np.sin(angle)
+      itr,p=search_tr2([r1,z1])
+      tmp1=0.
+      tmp2=0.
+      if itr>0:
+        for i in range(3):
+          node=nd[i,itr-1]
+          tmp1=tmp1+p[i]*pot0[node-1]
+          tmp2=tmp2+p[i]*dpot[node-1]
+      #endif itr>0
+      gyropot0_l[itask-itask1]=gyropot0_l[itask-itask1]+tmp1/float(ngyro)
+      gyrodpot_l[itask-itask1]=gyrodpot_l[itask-itask1]+tmp2/float(ngyro)
+  comm.barrier()
+  for imu in range(nmu):
+    itask1_mu=imu*nnode
+    itask2_mu=(imu+1)*nnode-1
+    tmp1=np.zeros((nnode,),dtype=float)
+    tmp2=np.zeros((nnode,),dtype=float)
+    if (not itask1>itask2_mu)and(not itask2<itask1_mu):
+      left=max(itask1,itask1_mu) 
+      right=min(itask2,itask2_mu)
+      tmp1[left-itask1_mu:right-itask1_mu+1]=gyropot0_l[left-itask1:right-itask1+1]
+      tmp2[left-itask1_mu:right-itask1_mu+1]=gyrodpot_l[left-itask1:right-itask1+1]
+    
+    tmp1=comm.allreduce(tmp1,op=summation)
+    tmp2=comm.allreduce(tmp2,op=summation)
+    if (imu>=imu1)and(imu<=imu2):
+      gyropot0[:,imu-imu1]=tmp1
+      gyrodpot[:,imu-imu1]=tmp2
+  return
+
+def gyropot_gpu(mu_arr,qi,mi,ngyro,rz,imu1,imu2):
+  import cupy as cp
+  gyropot_kernel=cp.RawKernel(r'''
+  extern "C" __device__    
+  void search_tr2(double r,double z,int* itr,double* p,int ihi,int jhi,int num_tri,double* guess_min,\
+    double* inv_guess_d,int* guess_xtable,int* guess_list,int* guess_count,double* mapping)
+  {
+    int ilo,jlo,ij[2],ix,iy,istart,iend,itrig;
+    double eps=1E-10,dx,dy,tmp;    
+    itr[0]=-1;
+    p[0]=0.;
+    p[1]=0.;
+    p[2]=0.;
+    ilo=1;
+    jlo=1;
+    ij[0]=floor((r-guess_min[0])*inv_guess_d[0])+1;
+    ij[1]=floor((z-guess_min[1])*inv_guess_d[1])+1;
+    ix=min(int(ihi),ij[0]);
+    ix=max(ilo,ix);
+    iy=min(int(jhi),ij[1]);
+    iy=max(jlo,iy);
+    istart=guess_xtable[(ix-1)*jhi+iy-1];
+    iend=istart+guess_count[(ix-1)*jhi+iy-1]-1;
+    for (int k=istart;k<=iend;k++){
+      itrig=guess_list[k-1];
+      dx=r-mapping[0*3*num_tri+2*num_tri+itrig-1];
+      dy=z-mapping[1*3*num_tri+2*num_tri+itrig-1];   
+      p[0]=mapping[0*3*num_tri+0*num_tri+itrig-1]*dx\
+          +mapping[0*3*num_tri+1*num_tri+itrig-1]*dy;
+      p[1]=mapping[1*3*num_tri+0*num_tri+itrig-1]*dx\
+          +mapping[1*3*num_tri+1*num_tri+itrig-1]*dy;
+      p[2]=1.-p[0]-p[1];
+      tmp=min(p[0],p[1]);
+      tmp=min(tmp,p[2]);
+      if (tmp>=-eps){
+        itr[0]=itrig;
+        break;
+      }
+    }
+  }
+  extern "C" __global__
+  void gyro_pot(double mu,double* Bmag,double* rz,double* pot0,double* dpot,double* gyropot0,double* gyrodpot,\
+       double mi,double qi,int ngyro,int nnode,int nblocks_max,int ihi,int jhi,int num_tri,double* guess_min,\
+       double* inv_guess_d,int* guess_xtable,int* guess_list,int* guess_count,double* mapping,int* nd)
+  {
+    int inode,igyro,itr[1],node;
+    double B,r,z,rho,angle,r1,z1,tmp1,tmp2,p[3];
+    inode=blockIdx.x;
+    while (inode<nnode){
+      B=Bmag[inode];
+      r=rz[inode*2+0];
+      z=rz[inode*2+1];
+      gyropot0[inode]=0.0;
+      gyrodpot[inode]=0.0;
+      rho=sqrt(2*mi*mu/B/qi/qi);
+      for (igyro=0;igyro<ngyro;igyro++){
+        angle=8.*atan(1.)*double(igyro)/double(ngyro);
+        r1=r+rho*cos(angle);
+        z1=z+rho*sin(angle);
+        search_tr2(r1,z1,itr,p,ihi,jhi,num_tri,guess_min,inv_guess_d,guess_xtable,guess_list,guess_count,mapping);
+        tmp1=0.;
+        tmp2=0.;
+        if (itr[0]>0){
+          for(int k=0;k<3;k++){
+            node=nd[k*num_tri+itr[0]-1];
+            tmp1=tmp1+p[k]*pot0[node-1];
+            tmp2=tmp2+p[k]*dpot[node-1];
+          }
+        }
+        gyropot0[inode]=gyropot0[inode]+tmp1/double(ngyro);
+        gyrodpot[inode]=gyrodpot[inode]+tmp2/double(ngyro);
+      }
+      inode=inode+nblocks_max;
+    }
+  }
+  ''','gyro_pot')
+  nblocks_max=4096
+  nblocks=min(nblocks_max,nnode)
+  global gyropot0,gyrodpot
+  nmu_l=imu2-imu1+1
+  gyropot0=np.zeros((nnode,nmu_l),dtype=float)
+  gyrodpot=np.zeros((nnode,nmu_l),dtype=float)
+  pot0_gpu=cp.array(pot0,dtype=cp.float64)
+  dpot_gpu=cp.array(dpot,dtype=cp.float64)
+  num_tri=np.shape(mapping)[2]
+  ihi,jhi=np.shape(guess_table)
+  guess_min_gpu=cp.array(guess_min,dtype=cp.float64)
+  inv_guess_d_gpu=cp.array(inv_guess_d,dtype=cp.float64)
+  guess_xtable_gpu=cp.array(guess_xtable,dtype=cp.int32).ravel(order='C')
+  guess_list_gpu=cp.array(guess_list,dtype=cp.int32)
+  guess_count_gpu=cp.array(guess_count,dtype=cp.int32).ravel(order='C')
+  mapping_gpu=cp.array(mapping,dtype=cp.float64).ravel(order='C')
+  nd_gpu=cp.array(nd,dtype=cp.int32).ravel(order='C')
+  Bmag=np.sqrt(B[:,0]**2+B[:,1]**2+B[:,2]**2)
+  Bmag_gpu=cp.array(Bmag,dtype=cp.float64)
+  rz_gpu=cp.array(rz,dtype=cp.float64).ravel(order='C')
+  gyropot0_gpu=cp.zeros((nnode,),dtype=cp.float64)
+  gyrodpot_gpu=cp.zeros((nnode,),dtype=cp.float64)
+  for imu in range(imu1,imu2+1):
+    mu=mu_arr[imu]
+    gyropot_kernel((nblocks,),(1,),(float(mu),Bmag_gpu,rz_gpu,pot0_gpu,dpot_gpu,gyropot0_gpu,gyrodpot_gpu,\
+        mi,qi,int(ngyro),int(nnode),int(nblocks_max),int(ihi),int(jhi),int(num_tri),guess_min_gpu,\
+        inv_guess_d_gpu,guess_xtable_gpu,guess_list_gpu,guess_count_gpu,mapping_gpu,nd_gpu))
+    cp.cuda.Stream.null.synchronize()
+    gyropot0[:,imu-imu1]=cp.asnumpy(gyropot0_gpu)
+    gyrodpot[:,imu-imu1]=cp.asnumpy(gyrodpot_gpu)
+  del guess_min_gpu,inv_guess_d_gpu,guess_xtable_gpu,guess_list_gpu,guess_count_gpu,mapping_gpu,\
+      nd_gpu,pot0_gpu,dpot_gpu,gyropot0_gpu,gyrodpot_gpu,Bmag_gpu,rz_gpu
+  mempool = cp.get_default_memory_pool()
+  pinned_mempool = cp.get_default_pinned_memory_pool()
+  mempool.free_all_blocks()
+  pinned_mempool.free_all_blocks()
+  return 
+

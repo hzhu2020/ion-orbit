@@ -23,9 +23,6 @@ try:
 except:
   use_gpu=False
 
-if gyro_E:
-  if rank==0: print('gyro_E must be set to False for this version. Exiting...')
-  exit()
 #initialize some global variables
 vt=np.sqrt(1.60217662E-19*Ti/mi) #thermal speed
 t_beg=time.time()
@@ -52,10 +49,7 @@ if rank==0: print('Partition orbits took time:',t_end-t_beg,'s',flush=True)
 #prepare gyro-averaged electric field
 if (gyro_E):
   t_beg=time.time()
-  if use_gpu:
-    var.gyropot_gpu(comm,mu_arr,qi,mi,ngyro,pot0fac,dpotfac,iorb1,iorb2)
-  else:
-    var.gyropot(comm,mu_arr,qi,mi,ngyro,MPI.SUM,pot0fac,dpotfac)
+  var.gyroE(comm,MPI.SUM,mu_arr,qi,mi,ngyro,iorb1,iorb2,use_gpu)
   t_end=time.time()
   if (rank==0)and((pot0fac>0)or(dpotfac>0)): print('Gyroavering electric field took time:',t_end-t_beg,'s',flush=True)
 #vphi_arr is the estimated value for v_\para; they also differ by a sign if Bphi<0

@@ -15,6 +15,7 @@ f0_smu_max=5. #maximum v_\perp normliaed by vt
 pot0fac=1. #factor that reduces 00 E field
 dpotfac=1. #factor that reduces turb E field
 dpot_fourier_maxm=10 #maximum poloidal Fourier mode number for dpot
+if (pot0fac==0.)and(dpotfac==0.): gyro_E=False
 #input directory containing adios bp files
 xgc='xgc1'#'xgc1' or 'xgca'
 input_dir='input_dir'
