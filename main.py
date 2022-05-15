@@ -185,14 +185,14 @@ comm.barrier()
 time.sleep(rank*0.001)
 print('rank=',rank,'total time=',(t_end_tot-t_beg_tot)/60.0,'min',flush=True)
 if use_gpu:
-  num_bad_total1=comm.reduce(orbit.num_bad1,op=MPI.SUM,root=0)
-  num_bad_total2=comm.reduce(orbit.num_bad2,op=MPI.SUM,root=0)
+  num_bad_total1=comm.allreduce(orbit.num_bad1,op=MPI.SUM)
+  num_bad_total2=comm.allreduce(orbit.num_bad2,op=MPI.SUM)
   if rank==0: print('Number of bad orbits before and after reverse integration:',num_bad_total1,num_bad_total2,flush=True)
-  num_bad_total3=comm.reduce(num_bad3,op=MPI.SUM,root=0)
+  num_bad_total3=comm.allreduce(num_bad3,op=MPI.SUM)
   if rank==0: print('Number of bad orbits after 2-point integration:',num_bad_total3,flush=True)
 else:
   num_bad=np.sum(bad_orb)
-  num_bad_total=comm.reduce(num_bad,op=MPI.SUM,root=0)
+  num_bad_total=comm.allreduce(num_bad,op=MPI.SUM)
   if rank==0: print('Number of bad orbits:',num_bad_total,flush=True)
 #output bad orbits
 if rank==0:
@@ -352,25 +352,16 @@ elif (rank==0)and(bp_write)and(not adios2_mpi):
   output=adios2.open('orbit.bp','w')
   write_parameters(output)
   #nmu, nPphi, nH, nt
-  value=np.array(nmu)
-  start=np.zeros((value.ndim),dtype=int) 
-  count=np.array((value.shape),dtype=int) 
-  shape=count
-  output.write('nmu',value,shape,start,count)
-  value=np.array(nPphi)
-  output.write('nPphi',value,shape,start,count)
-  value=np.array(nH)
-  output.write('nH',value,shape,start,count)
-  value=np.array(nt)
-  output.write('nt',value,shape,start,count)
+  output.write('nmu',np.array(nmu))
+  output.write('nPphi',np.array(nPphi))
+  output.write('nH',np.array(nH))
+  output.write('nt',np.array(nt))
   if use_gpu:
-    value=np.array(num_bad_total1)
-    output.write('num_bad1',value,shape,start,count)
-    value=np.array(num_bad_total2)
-    output.write('num_bad2',value,shape,start,count)
+    output.write('num_bad1',np.array(num_bad_total1))
+    output.write('num_bad2',np.array(num_bad_total2))
+    output.write('num_bad3',np.array(num_bad_total3))
   else:
-    value=np.array(num_bad_total)
-    output.write('num_bad',value,shape,start,count)
+    output.write('num_bad',np.array(num_bad_total))
   #steps_orb, dt_orb
   start=np.zeros((steps_output.ndim),dtype=int) 
   count=np.array((steps_output.shape),dtype=int) 
@@ -386,8 +377,8 @@ elif (rank==0)and(bp_write)and(not adios2_mpi):
   output.write('R_end',r_end,shape,start,count)
   output.write('Z_end',z_end,shape,start,count)
   #mu_orb
-  start=np.zeros((mu_arr.ndim),dtype=int) 
-  count=np.array((mu_arr.shape),dtype=int) 
+  start=np.zeros((mu_arr.ndim),dtype=int)
+  count=np.array((mu_arr.shape),dtype=int)
   shape=count
   output.write('mu_orb',mu_arr,shape,start,count)
   #R_orb, Z_orb, vp_orb
@@ -399,25 +390,21 @@ elif (rank==0)and(bp_write)and(not adios2_mpi):
   output.write('vp_orb',vp_output,shape,start,count)
   output.close()
 elif (bp_write)and(adios2_mpi):
-  if rank==0:
-    write_parameters(output)
-    value=np.array(nmu)
-    start=np.zeros((value.ndim),dtype=int) 
-    count=np.array((value.shape),dtype=int) 
-    shape=count
-    output.write('nmu',np.array(nmu),shape,start,count)
-    output.write('nPphi',np.array(nPphi),shape,start,count)
-    output.write('nH',np.array(nH),shape,start,count)
-    output.write('nt',np.array(nt),shape,start,count)
-    if use_gpu:
-      output.write('num_bad1',np.array(num_bad_total1),shape,start,count)
-      output.write('num_bad2',np.array(num_bad_total2),shape,start,count)
-    else:
-      output.write('num_bad',np.array(num_bad_total),shape,start,count)
-    start=np.zeros((mu_arr.ndim),dtype=int) 
-    count=np.array((mu_arr.shape),dtype=int) 
-    shape=count
-    output.write('mu_orb',mu_arr,shape,start,count)
+  write_parameters(output)
+  output.write('nmu',np.array(nmu))
+  output.write('nPphi',np.array(nPphi))
+  output.write('nH',np.array(nH))
+  output.write('nt',np.array(nt))
+  if use_gpu:
+    output.write('num_bad1',np.array(num_bad_total1))
+    output.write('num_bad2',np.array(num_bad_total2))
+    output.write('num_bad3',np.array(num_bad_total3))
+  else:
+    output.write('num_bad',np.array(num_bad_total))
+  start=np.zeros((mu_arr.ndim),dtype=int)
+  count=np.array((mu_arr.shape),dtype=int)
+  shape=count
+  output.write('mu_orb',mu_arr,shape,start,count)
 
   norb=nmu*nPphi*nH
   r_beg=np.ravel(r_beg,order='C')
