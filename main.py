@@ -90,6 +90,8 @@ if use_gpu:
     mempool.set_limit(fraction=1.)
   loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.calc_orb_gpu\
   (iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,1)
+  num_bad3=0
+  '''
   if orbit.num_bad1>0:
     loss_orb,tau_orb,dt_orb_out_orb,steps_orb,r_orb,z_orb,vp_orb=orbit.calc_orb_gpu\
     (iorb1,iorb2,r_end,z_end,r_beg,z_beg,mu_arr,Pphi_arr,2)
@@ -111,6 +113,7 @@ if use_gpu:
   if determine_loss:
     loss_orb,tau2_orb,_,_,_,_,_=orbit.calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,3)
     tau_orb=tau_orb+tau2_orb
+  '''
 else:
   r_orb=np.zeros((mynorb,nt),dtype=float,order='C')
   z_orb=np.zeros((mynorb,nt),dtype=float,order='C')
@@ -140,7 +143,7 @@ else:
     accel=1
     while step==1:
       lost,tau,dt_orb_out,step,r_orb1,z_orb1,vp_orb1,bad=orbit.calc_orb(calc_gyroE,iorb,r_beg[imu,iPphi,iH],\
-            z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,False)
+            z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,True)
       accel=accel*2
     r_orb[iorb-iorb1,:]=r_orb1
     z_orb[iorb-iorb1,:]=z_orb1
@@ -149,6 +152,7 @@ else:
     dt_orb_out_orb[iorb-iorb1]=dt_orb_out
     bad_orb[iorb-iorb1]=bad
     tau_orb[iorb-iorb1]=tau
+    '''
     #use 2-point orbit integration
     if bad==1:
       step=1
@@ -175,9 +179,10 @@ else:
               z_beg[imu,iPphi,iH],r_end[imu,iPphi,iH],z_end[imu,iPphi,iH],mu,Pphi,accel,True)
         accel=accel*2
       tau_orb[iorb-iorb1]=tau_orb[iorb-iorb1]+tau2
+    '''
     if (float(iorb-iorb1)/float(mynorb))>pctg:
       t_end=time.time()
-      print('rank=',rank,'finished',int(pctg*100),'% in ',t_end-t_beg_tot,'s',flush=True)
+      #print('rank=',rank,'finished',int(pctg*100),'% in ',t_end-t_beg_tot,'s',flush=True)
       pctg=float(iorb-iorb1)/float(mynorb)+0.01
     if (lost)and(determine_loss): loss_orb[iorb-iorb1]=1
 t_end_tot=time.time()

@@ -56,14 +56,14 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
   for it in range(np.int(max_step*nsteps)):
     if np.isnan(r+z):
       if num_cross==1: lost=True
-      break
+      #break
     if it==nsteps*step_count:
-      if (step_count<nt)and(num_cross==0):
+      if (step_count<nt)and(num_cross==1):
         r_orb1[step_count]=r
         z_orb1[step_count]=z
         vp_orb1[step_count]=vp
 
-      if num_cross==0: step_count=step_count+1
+      if num_cross==1: step_count=step_count+1
 
     if(debug)and(it%nsteps==0):
       debug_count=debug_count+1
@@ -125,53 +125,54 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
     if theta<=var.theta[0]: theta=theta+2*np.pi
     dist=np.sqrt((r-ra)**2+(z-za)**2)
     dist_surf=myinterp.OneD_NL(var.theta,var.dist,theta)
-    if (num_cross==0) and (\
-       (psi>(1+cross_psitol)*var.psi_surf) \
-       or (np.sqrt((r-r_end)**2+(z-z_end)**2)<cross_rztol)\
-       or (dist>dist_surf*(1+cross_disttol))
+    if (num_cross==1) and (\
+       (psi<(1-cross_psitol)*var.psi_surf) \
+       or (np.sqrt((r-r_beg)**2+(z-z_beg)**2)<cross_rztol)\
+       or (dist<dist_surf*(1-cross_disttol))
        ): 
       #first time cross (leave) the surface: output orbits here
-      num_cross=1
-      if np.sqrt((r-r_end)**2+(z-z_end)**2)>=cross_rztol:
+      num_cross=2
+      if (np.sqrt((r-r_beg)**2+(z-z_beg)**2)>=cross_rztol):
         bad=1
       else:
         bad=0
-      if (step_count<nt)and(nsteps==1):
-        dt_orb_out=dt_xgc*accel
-        r_orb1[step_count]=r
-        z_orb1[step_count]=z
-        vp_orb1[step_count]=vp
-        step_count=step_count+1
+      if (determine_loss): break
+    #end of the time loop
+  if (step_count<nt)and(nsteps==1):
+    dt_orb_out=dt_xgc*accel
+    r_orb1[step_count]=r
+    z_orb1[step_count]=z
+    vp_orb1[step_count]=vp
+    step_count=step_count+1
+  else:
+    if it_count<int(max_step):
+      #interpolate to the next step
+      nsteps_local=(it+1)%nsteps
+      if nsteps_local==0:
+        r_tmp[it_count]=r
+        z_tmp[it_count]=z
+        vp_tmp[it_count]=vp
       else:
-        if it_count<int(max_step):
-          #interpolate to the next step
-          nsteps_local=(it+1)%nsteps
-          if nsteps_local==0:
-            r_tmp[it_count]=r
-            z_tmp[it_count]=z
-            vp_tmp[it_count]=vp
-          else:
-            r_tmp[it_count]=r_tmp[it_count-1]+(r-r_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
-            z_tmp[it_count]=z_tmp[it_count-1]+(z-z_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
-            vp_tmp[it_count]=vp_tmp[it_count-1]+(vp-vp_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
-        step_count=min(step_count,nt-1)
-        dt_orb_out=tau/np.float(step_count)
-        for it2 in range(step_count+1):
-          #t_ind should be in the range [0,it_count]
-          t_ind=float(it2)*dt_orb_out/dt_orb/float(nsteps)
-          wt=t_ind-math.floor(t_ind)
-          t_ind=math.floor(t_ind)
-          if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
-            t_ind=t_ind-1
-            wt=1.0
-          if abs(r_tmp[t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value 
-          r_orb1[it2]=(1-wt)*r_tmp[t_ind]+wt*r_tmp[t_ind+1]
-          z_orb1[it2]=(1-wt)*z_tmp[t_ind]+wt*z_tmp[t_ind+1]
-          vp_orb1[it2]=(1-wt)*vp_tmp[t_ind]+wt*vp_tmp[t_ind+1]
-        #end for it2
-        step_count=step_count+1
-      if (not determine_loss): break
-
+        r_tmp[it_count]=r_tmp[it_count-1]+(r-r_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
+        z_tmp[it_count]=z_tmp[it_count-1]+(z-z_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
+        vp_tmp[it_count]=vp_tmp[it_count-1]+(vp-vp_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
+    step_count=min(step_count,nt-1)
+    dt_orb_out=tau/np.float(step_count)
+    for it2 in range(step_count+1):
+      #t_ind should be in the range [0,it_count]
+      t_ind=float(it2)*dt_orb_out/dt_orb/float(nsteps)
+      wt=t_ind-math.floor(t_ind)
+      t_ind=math.floor(t_ind)
+      if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
+        t_ind=t_ind-1
+        wt=1.0
+      if abs(r_tmp[t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value 
+      r_orb1[it2]=(1-wt)*r_tmp[t_ind]+wt*r_tmp[t_ind+1]
+      z_orb1[it2]=(1-wt)*z_tmp[t_ind]+wt*z_tmp[t_ind+1]
+      vp_orb1[it2]=(1-wt)*vp_tmp[t_ind]+wt*vp_tmp[t_ind+1]
+    #end for it2
+    step_count=step_count+1
+    '''
     if (num_cross==1) and (z>var.zx) and (\
        (psi<(1-cross_psitol)*var.psi_surf) \
        or (np.sqrt((r-r_beg)**2+(z-z_beg)**2)<cross_rztol)\
@@ -180,7 +181,7 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
       num_cross=2 #second time cross (enter) the surface
       lost=False #redundantly setting lost=F
       break
-    #end of the time loop
+    '''
 
   if debug:  
     output.write('%8d\n'%-1)
@@ -188,7 +189,10 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
     output.write('%8d\n'%debug_count)
     output.close()
   if step_count>nt: step_count=1#not enough time steps to cross the surface
-  if (determine_loss)and(num_cross==1)and(not lost): tau=0.#not enough time steps to determine loss
+  if (determine_loss)and(num_cross==1)and(not lost):
+    step_count=1
+    tau=0.#not enough time steps to determine loss
+  if iorb==38: print(dt_orb,num_cross,lost,step_count,flush=True)
   return lost,tau,dt_orb_out,step_count,r_orb1,z_orb1,vp_orb1,bad
 
 def rhs(qi,mi,r,z,mu,vp):
@@ -496,7 +500,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
     double* Pphi_arr,double* psi2d,double* dist,double psix,double zx,double ra,double za,double cross_psitol,\
     double cross_rztol,double cross_disttol,bool determine_loss,bool reverse,int* bad)
   {
-    int iorb0,iorb,num_cross,step_count,itheta,t_ind,it_count,nsteps_local;
+    int iorb0,iorb,num_cross,step_count,itheta,t_ind,it_count,nsteps_local,it;
     double r,z,vp,r0,z0,dr,dz,rc,zc,vpc,drdtc,dzdtc,dvpdtc,drdte,dzdte,dvpdte,rhs_l[3];
     double theta_l,dtheta,wtheta,wt,tau,Bmag_l,Bphi_l,psi,dist_l,dist_surf,tmp;
     double dt_orb0;
@@ -523,12 +527,12 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
         r=r_beg[iorb];
         z=z_beg[iorb];
       }
-      for (int it=0;it<nt;it++){
+      for (it=0;it<nt;it++){
         r_orb1[iorb*nt+it]=0.;
         z_orb1[iorb*nt+it]=0.;
         vp_orb1[iorb*nt+it]=0.;
       }
-      for (int it=0;it<max_step;it++){
+      for (it=0;it<max_step;it++){
         r_tmp[iorb0*max_step+it]=0.;
         z_tmp[iorb0*max_step+it]=0.;
         vp_tmp[iorb0*max_step+it]=0.;
@@ -545,18 +549,18 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
       Bmag_l=TwoD(Bmag,r,z,dr,dz,r0,z0,Nr,Nz);
       Bphi_l=TwoD(Bphi,r,z,dr,dz,r0,z0,Nr,Nz);
       vp=(Pphi_arr[iorb]-qi*psi_surf)/mi/r/Bphi_l*Bmag_l;
-      for (int it=0;it<max_step*nsteps;it++){
+      for (it=0;it<max_step*nsteps;it++){
         if (isnan(r+z)){
          if (num_cross==1) lost=true;
          break;
         }
         if (it==nsteps*step_count){
-          if ((step_count<nt)&&(num_cross==0)){
+          if ((step_count<nt)&&(num_cross==1)){
           r_orb1[iorb*nt+step_count]=r;
           z_orb1[iorb*nt+step_count]=z;
           vp_orb1[iorb*nt+step_count]=vp;
           }
-          if (num_cross==0) step_count=step_count+1;
+          if (num_cross==1) step_count=step_count+1;
         }
         if (it%nsteps==0){
           r_tmp[iorb0*max_step+it_count]=r;
@@ -636,17 +640,28 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
           wtheta=(theta_l-theta[itheta])/(theta[itheta+1]-theta[itheta]);
           dist_surf=dist[itheta]*(1-wtheta)+dist[itheta+1]*wtheta;
         }
-        if((num_cross==0)&&(\
-          (psi>(1+cross_psitol)*psi_surf)||\
-          (sqrt((r-r_end[iorb])*(r-r_end[iorb])+(z-z_end[iorb])*(z-z_end[iorb]))<cross_rztol)||\
-          (dist_l>dist_surf*(1+cross_disttol))\
+        if((num_cross==1)&&(\
+          (sqrt((r-r_beg[iorb])*(r-r_beg[iorb])+(z-z_beg[iorb])*(z-z_beg[iorb]))<cross_rztol)||\
+          (dist_l<dist_surf*(1-cross_disttol))\
          )){
-           num_cross=1;
-           if (sqrt((r-r_end[iorb])*(r-r_end[iorb])+(z-z_end[iorb])*(z-z_end[iorb]))>=cross_rztol){
+           num_cross=2;
+           if (sqrt((r-r_beg[iorb])*(r-r_beg[iorb])+(z-z_beg[iorb])*(z-z_beg[iorb]))>=cross_rztol){
              bad[iorb]=1;
            }else{
              bad[iorb]=0;
            }
+           if (determine_loss) break;
+        }//if cross
+       //if((num_cross==1)&&(z>zx)&&(\
+       //  (psi<(1-cross_psitol)*psi_surf)||\
+       //  (sqrt((r-r_beg[iorb])*(r-r_beg[iorb])+(z-z_beg[iorb])*(z-z_beg[iorb]))<cross_rztol)||\
+       //  (dist_l<dist_surf*(1-cross_disttol))\
+       //)){
+       //  num_cross=2;
+       //  lost=false;
+       //  break;
+       //}
+      }//end for it
            if ((step_count<nt)&&(nsteps==1)){
              dt_orb_out_orb[iorb]=dt_orb*double(nsteps);
              r_orb1[iorb*nt+step_count]=r;
@@ -701,18 +716,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
                  vp_orb1[iorb*nt+step_count-it2-1]=tmp;
              }
            }
-           if (! determine_loss) break;
-        }//if cross
-       if((num_cross==1)&&(z>zx)&&(\
-         (psi<(1-cross_psitol)*psi_surf)||\
-         (sqrt((r-r_beg[iorb])*(r-r_beg[iorb])+(z-z_beg[iorb])*(z-z_beg[iorb]))<cross_rztol)||\
-         (dist_l<dist_surf*(1-cross_disttol))\
-       )){
-         num_cross=2;
-         lost=false;
-         break;
-      }
-      }//end for it
+
       if ((! determine_loss)&&(step_count>nt)){
         dt_orb=dt_orb*2;
       }else if((determine_loss)and(num_cross==1)and(! lost)){
@@ -738,7 +742,7 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
   mynorb=iorb2-iorb1+1
   if stage==1:
     reverse=False
-    determine_loss=False
+    determine_loss=True
   if stage==2:
     reverse=True
     determine_loss=False
