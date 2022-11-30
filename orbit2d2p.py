@@ -85,6 +85,8 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
     double theta_l,dtheta,wtheta,wt,tau[2],Bmag_l,Bphi_l,psi,dist_l,dist_surf,tmp;
     double dt_orb0,z_mid,r_old[2],z_old[2],vp_old[2];
     bool lost,unfinished,close;
+    double accel;
+    accel=1.0;
     r0=rlin[0];
     z0=zlin[0];
     dr=rlin[1]-rlin[0];
@@ -138,7 +140,10 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
         r=r_old[iloop];
         z=z_old[iloop];
         vp=vp_old[iloop];
-        if (isnan(r+z)) break;
+        if (isnan(r+z)){
+          num_cross=1;
+          break;
+        }
         if (it%nsteps==0){
           r_tmp[(2*iorb0+iloop)*max_step+it_count[iloop]]=r;
           z_tmp[(2*iorb0+iloop)*max_step+it_count[iloop]]=z;
@@ -156,7 +161,10 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
         vpc=vp+dvpdtc*dt_orb/2.;
         rc=r+drdtc*dt_orb/2.;
         zc=z+dzdtc*dt_orb/2.;
-        if (isnan(rc+zc)) break;
+        if (isnan(rc+zc)){
+          num_cross=1;
+          break;
+        }
         //RK4 2nd step
         rhs(qi,mi,rc,zc,mu,vpc,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
             curlbr,curlbz,curlbphi,r0,z0,dr,dz,Nr,Nz);
@@ -166,7 +174,10 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
         dzdte=dzdte+dzdtc/3.;
         rc=r+drdtc*dt_orb/2.;
         zc=z+dzdtc*dt_orb/2.;
-        if (isnan(rc+zc)) break;
+        if (isnan(rc+zc)){
+          num_cross=1;
+          break;
+        }
         //RK4 3nd step
         rhs(qi,mi,rc,zc,mu,vpc,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
             curlbr,curlbz,curlbphi,r0,z0,dr,dz,Nr,Nz);
@@ -176,7 +187,10 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
         dzdte=dzdte+dzdtc/3.;
         rc=r+drdtc*dt_orb;
         zc=z+dzdtc*dt_orb;
-        if (isnan(rc+zc)) break;
+        if (isnan(rc+zc)){
+          num_cross=1;
+          break;
+        }
         //Rk4 4th step
         rhs(qi,mi,rc,zc,mu,vpc,rhs_l,Br,Bz,Bphi,Er00,Ez00,Er0m,Ez0m,gradBr,gradBz,\
             curlbr,curlbz,curlbphi,r0,z0,dr,dz,Nr,Nz);
@@ -187,7 +201,10 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
         vp=vp+dvpdte*dt_orb;
         r=r+drdte*dt_orb;
         z=z+dzdte*dt_orb;
-        if (isnan(r+z)) break;
+        if (isnan(r+z)){
+          num_cross=1;
+          break;
+        }
         psi=TwoD(psi2d,r,z,dr,dz,r0,z0,Nr,Nz);
         theta_l=atan2(z-za,r-ra);
         if (theta_l<=theta[0]) theta_l+=8*atan(1.);
@@ -273,7 +290,8 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,bad_input):
         }//end if close enough
      }//end for it
      if (unfinished){
-        dt_orb=dt_orb*2;
+        accel=2.*accel;
+        dt_orb=dt_orb0*accel;
       }else{
         steps_orb[iorb]=step_count;
         tau_orb[iorb]=tau[0]+tau[1];

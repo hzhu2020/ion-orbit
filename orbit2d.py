@@ -298,7 +298,9 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
       r=r_old[iloop]
       z=z_old[iloop]
       vp=vp_old[iloop]
-      if np.isnan(r+z): break
+      if np.isnan(r+z):
+        num_cross=1
+        break
       if it%nsteps==0:
         r_tmp[iloop*int(max_step)+it_count[iloop]]=r
         z_tmp[iloop*int(max_step)+it_count[iloop]]=z
@@ -317,7 +319,9 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
       vpc=vp+dvpdtc*dt_orb/2
       rc=r+drdtc*dt_orb/2
       zc=z+dzdtc*dt_orb/2
-      if np.isnan(rc+zc): break
+      if np.isnan(rc+zc):
+        num_cross=1
+        break
       #RK4 2nd step
       drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
       dvpdte=dvpdte+dvpdtc/3
@@ -325,7 +329,9 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
       dzdte=dzdte+dzdtc/3
       rc=r+drdtc*dt_orb/2
       zc=z+dzdtc*dt_orb/2
-      if np.isnan(rc+zc): break
+      if np.isnan(rc+zc):
+        num_cross=1
+        break
       #RK4 3nd step
       drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
       dvpdte=dvpdte+dvpdtc/3
@@ -333,7 +339,9 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
       dzdte=dzdte+dzdtc/3
       rc=r+drdtc*dt_orb
       zc=z+dzdtc*dt_orb
-      if np.isnan(rc+zc): break
+      if np.isnan(rc+zc):
+        num_cross=1
+        break
       #Rk4 4th step
       drdtc,dzdtc,dvpdtc=rhs(qi,mi,rc,zc,mu,vpc)
       dvpdte=dvpdte+dvpdtc/6
@@ -342,7 +350,9 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
       vp=vp+dvpdte*dt_orb
       r=r+drdte*dt_orb
       z=z+dzdte*dt_orb
-      if np.isnan(r+z): break
+      if np.isnan(r+z):
+        num_cross=1
+        break
 
       #check if the orbit has crossed the surface
       psi=myinterp.TwoD(var.psi2d,r,z)
