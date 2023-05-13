@@ -134,12 +134,11 @@ def Pot_init(rank):
   if adios_version!=2:
     if rank==0: print('Reading potential: ADIOS2 is required!',flush=True)
     exit()
-  global guess_min,inv_guess_d,guess_table,guess_xtable,guess_count,guess_list,mapping,nd,psi_rz
+  global guess_min,inv_guess_d,guess_xtable,guess_count,guess_list,mapping,nd,psi_rz
   fname=input_dir+'/xgc.mesh.bp'
   f=ad.open(fname,'r')
   guess_min=f.read('guess_min')
   inv_guess_d=f.read('inv_guess_d')
-  guess_table=f.read('guess_table')
   guess_xtable=f.read('guess_xtable')
   guess_count=f.read('guess_count')
   guess_list=f.read('guess_list')
@@ -147,7 +146,6 @@ def Pot_init(rank):
   nd=f.read('nd')
   psi_rz=f.read('psi')
   f.close()
-  guess_table=np.transpose(guess_table)
   mapping=np.transpose(mapping)
   guess_xtable=np.transpose(guess_xtable)
   guess_count=np.transpose(guess_count)
@@ -374,7 +372,7 @@ def node_to_2d_init_gpu(comm,summation,itask1,itask2,rlin,zlin):
   itr_save_gpu=cp.zeros((Nr*Nz,),dtype=cp.int32)
   p_save_gpu=cp.zeros((Nr*Nz*3,),dtype=cp.float64)
   num_tri=np.shape(mapping)[2]
-  ihi,jhi=np.shape(guess_table)
+  ihi,jhi=np.shape(guess_xtable)
   guess_min_gpu=cp.array(guess_min,dtype=cp.float64)
   inv_guess_d_gpu=cp.array(inv_guess_d,dtype=cp.float64)
   guess_xtable_gpu=cp.array(guess_xtable,dtype=cp.int32).ravel(order='C')
@@ -504,7 +502,7 @@ def search_tr2(xy):
    eps=1e-10
 
    ilo,jlo=1,1
-   ihi,jhi=np.shape(guess_table)
+   ihi,jhi=np.shape(guess_xtable)
    ij=np.zeros((2,),dtype=int)
    ij[0]=math.floor((xy[0]-guess_min[0])*inv_guess_d[0])+1
    ij[1]=math.floor((xy[1]-guess_min[1])*inv_guess_d[1])+1
@@ -738,7 +736,7 @@ def gyropot_gpu(mu_arr,qi,mi,ngyro,rz,imu1,imu2):
   pot0_gpu=cp.array(pot0,dtype=cp.float64)
   dpot_gpu=cp.array(dpot,dtype=cp.float64)
   num_tri=np.shape(mapping)[2]
-  ihi,jhi=np.shape(guess_table)
+  ihi,jhi=np.shape(guess_xtable)
   guess_min_gpu=cp.array(guess_min,dtype=cp.float64)
   inv_guess_d_gpu=cp.array(inv_guess_d,dtype=cp.float64)
   guess_xtable_gpu=cp.array(guess_xtable,dtype=cp.int32).ravel(order='C')
