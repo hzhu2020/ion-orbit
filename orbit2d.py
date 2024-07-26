@@ -533,6 +533,15 @@ def calc_orb_gpu(iorb1,iorb2,r_beg,z_beg,r_end,z_end,mu_arr,Pphi_arr,stage):
         r=r_beg[iorb];
         z=z_beg[iorb];
       }
+      //**********************
+      //Use 2-point integration for orbit calculation in the confined region.
+      //Therefore, skip the following forward or backward orbit integration.
+        if (! determine_loss){
+          bad[iorb]=1;
+          iorb=iorb+nblocks_max;
+          continue;
+        }
+      //*********************
       for (int it=0;it<nt;it++){
         r_orb1[iorb*nt+it]=0.;
         z_orb1[iorb*nt+it]=0.;
