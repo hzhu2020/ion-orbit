@@ -254,7 +254,7 @@ def H_arr(comm,qi,mi,nmu,nPphi,nH,mu_arr,Pphi_arr,summation):
     pks1,_=find_peaks(Hsurf)
     pks2,_=find_peaks(-Hsurf)
     if (np.size(pks1)>1)or(np.size(pks2)>1):#rare cases when H has multiple peaks&troughs
-      print('H(theta) has multiple peaks at imu=',imu,'iPphi=',iPphi,flush=True)
+      #print('H(theta) has multiple peaks at imu=',imu,'iPphi=',iPphi,flush=True)
       theta_total=0.0
       #first, determine number of nodes where \partial H/\partial\theta>0 
       for isurf in range(nsurf):

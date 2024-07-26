@@ -1,47 +1,24 @@
-from parameters import xgc,adios_version,input_dir,pot_file,\
-                       surf_psin,surf_psitol,surf_rztol,interp_method
-if adios_version==1:
-  import adios as ad
-elif adios_version==2:
-  import adios2 as ad
-else:
-  print('Wrong adios version.',flush=True)
-  exit()
-
+from parameters import xgc,input_dir,pot_file,surf_psin,surf_psitol,surf_rztol,interp_method
+import adios2 as ad
 import numpy as np
 from scipy.interpolate import griddata
 import math
 
 def Grid(Nr,Nz):
   fname=input_dir+'/xgc.mesh.bp'
-  if adios_version==1:
-    f=ad.file(fname)
-    rz=f['rz'].read()
-    psi_rz=f['psi'].read()
-    f.close()
-    fname=input_dir+'/xgc.equil.bp'
-    f=ad.file(fname)
-    rx=f['eq_x_r'].read()
-    zx=f['eq_x_z'].read()
-    psix=f['eq_x_psi'].read()
-    Ba=f['eq_axis_b'].read()
-    ra=f['eq_axis_r'].read()
-    za=f['eq_axis_z'].read()
-    f.close()
-  elif adios_version==2:
-    f=ad.open(fname,'r')
-    rz=f.read('/coordinates/values')
-    psi_rz=f.read('psi')
-    f.close()
-    fname=input_dir+'/xgc.equil.bp'
-    f=ad.open(fname,'r')
-    rx=f.read('eq_x_r')
-    zx=f.read('eq_x_z')
-    psix=f.read('eq_x_psi')
-    Ba=f.read('eq_axis_b')
-    ra=f.read('eq_axis_r')
-    za=f.read('eq_axis_z')
-    f.close()
+  f=ad.open(fname,'r')
+  rz=f.read('rz')
+  psi_rz=f.read('psi')
+  f.close()
+  fname=input_dir+'/xgc.equil.bp'
+  f=ad.open(fname,'r')
+  rx=f.read('eq_x_r')
+  zx=f.read('eq_x_z')
+  psix=f.read('eq_x_psi')
+  Ba=f.read('eq_axis_b')
+  ra=f.read('eq_axis_r')
+  za=f.read('eq_axis_z')
+  f.close()
   #find the surface closest to given surf_psin
   global surf_psin #need to claim it global since its value is changed below
   dpsi=1e10
@@ -99,22 +76,10 @@ def Curl(r,z,fldr,fldz,fldphi,Nr,Nz):
 
 def Bfield(rz,rlin,zlin,itask1,itask2):
   global B
-  if adios_version==1:
-    fname=input_dir+'/xgc.bfield.bp'
-    f=ad.file(fname)
-    B=f['/node_data[0]/values'].read()
-    f.close()
-  elif adios_version==2:
-    fname=input_dir+'/xgc.bfield.bp'
-    f=ad.open(fname,'r')
-    if xgc=='xgca':
-      B=f.read('bfield')
-    elif xgc=='xgc1':
-      B=f.read('/node_data[0]/values')
-    else:
-      print('Wrong parameter xgc.')
-    f.close()
-
+  fname=input_dir+'/xgc.bfield.bp'
+  f=ad.open(fname,'r')
+  B=f.read('bfield')
+  f.close()
   R,Z=np.meshgrid(rlin,zlin)
   if(itask1<=1)and(1<=itask2):
     Br=griddata(rz,B[:,0],(R,Z),method=interp_method)
@@ -131,19 +96,20 @@ def Bfield(rz,rlin,zlin,itask1,itask2):
   return Br,Bz,Bphi
 
 def Pot_init(rank):
-  if adios_version!=2:
-    if rank==0: print('Reading potential: ADIOS2 is required!',flush=True)
-    exit()
   global guess_min,inv_guess_d,guess_xtable,guess_count,guess_list,mapping,nd,psi_rz
   fname=input_dir+'/xgc.mesh.bp'
   f=ad.open(fname,'r')
-  guess_min=f.read('guess_min')
-  inv_guess_d=f.read('inv_guess_d')
+  guess_min_r=f.read('guess_min_r')
+  guess_min_z=f.read('guess_min_z')
+  guess_min=np.array([guess_min_r,guess_min_z])
+  inv_d1=f.read('guess_inv_d1')
+  inv_d2=f.read('guess_inv_d2')
+  inv_guess_d=np.array([inv_d1,inv_d2])
   guess_xtable=f.read('guess_xtable')
   guess_count=f.read('guess_count')
   guess_list=f.read('guess_list')
   mapping=f.read('mapping')
-  nd=f.read('nd')
+  nd=f.read('nd_connect_list')
   psi_rz=f.read('psi')
   f.close()
   mapping=np.transpose(mapping)
