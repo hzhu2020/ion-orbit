@@ -6,12 +6,12 @@ import math
 
 def Grid(Nr,Nz):
   fname=input_dir+'/xgc.mesh.bp'
-  f=ad.open(fname,'r')
+  f=ad.open(fname,'rra')
   rz=f.read('rz')
   psi_rz=f.read('psi')
   f.close()
   fname=input_dir+'/xgc.equil.bp'
-  f=ad.open(fname,'r')
+  f=ad.open(fname,'rra')
   rx=f.read('eq_x_r')
   zx=f.read('eq_x_z')
   psix=f.read('eq_x_psi')
@@ -77,20 +77,20 @@ def Curl(r,z,fldr,fldz,fldphi,Nr,Nz):
 def Bfield(rz,rlin,zlin,itask1,itask2):
   global B
   fname=input_dir+'/xgc.bfield.bp'
-  f=ad.open(fname,'r')
+  f=ad.open(fname,'rra')
   B=f.read('bfield')
   f.close()
   R,Z=np.meshgrid(rlin,zlin)
   if(itask1<=1)and(1<=itask2):
-    Br=griddata(rz,B[:,0],(R,Z),method=interp_method)
+    Br=griddata(rz,B[0,:],(R,Z),method=interp_method)
   else:
     Br=np.zeros(np.shape(R),dtype=float)
   if(itask1<=2)and(2<=itask2):
-    Bz=griddata(rz,B[:,1],(R,Z),method=interp_method)
+    Bz=griddata(rz,B[1,:],(R,Z),method=interp_method)
   else:
     Bz=np.zeros(np.shape(R),dtype=float)
   if(itask1<=3)and(3<=itask2):
-    Bphi=griddata(rz,B[:,2],(R,Z),method=interp_method)
+    Bphi=griddata(rz,B[2,:],(R,Z),method=interp_method)
   else:
     Bphi=np.zeros(np.shape(R),dtype=float)
   return Br,Bz,Bphi
@@ -98,7 +98,7 @@ def Bfield(rz,rlin,zlin,itask1,itask2):
 def Pot_init(rank):
   global guess_min,inv_guess_d,guess_xtable,guess_count,guess_list,mapping,nd,psi_rz
   fname=input_dir+'/xgc.mesh.bp'
-  f=ad.open(fname,'r')
+  f=ad.open(fname,'rra')
   guess_min_r=f.read('guess_min_r')
   guess_min_z=f.read('guess_min_z')
   guess_min=np.array([guess_min_r,guess_min_z])
@@ -118,7 +118,7 @@ def Pot_init(rank):
   nd=np.transpose(nd)
   global pot0,dpot
   fname=input_dir+'/'+pot_file
-  f=ad.open(fname,'r')
+  f=ad.open(fname,'rra')
   pot0=f.read('pot0')
   dpot=f.read('dpot')
   f.close()
@@ -130,7 +130,7 @@ def Pot_init(rank):
 def grid_deriv_init():
   global nelement_r,eindex_r,value_r,nelement_z,eindex_z,value_z,basis,nnode
   fname=input_dir+'/xgc.grad_rz.bp'
-  fid=ad.open(fname,'r')
+  fid=ad.open(fname,'rra')
   nelement_r=fid.read('nelement_r')
   eindex_r=fid.read('eindex_r')
   value_r=fid.read('value_r')
@@ -165,9 +165,9 @@ def grid_deriv(inode1,inode2,fld):
       dfdr[i]=dfdpsi[i]
       dfdz[i]=dfdtheta[i]
     else:
-      tmp=np.sqrt(B[i,0]**2+B[i,1]**2)
-      dfdr[i]=(dfdpsi[i]*B[i,1]+dfdtheta[i]*B[i,0])/tmp
-      dfdz[i]=(-dfdpsi[i]*B[i,0]+dfdtheta[i]*B[i,1])/tmp
+      tmp=np.sqrt(B[0,i]**2+B[1,i]**2)
+      dfdr[i]=(dfdpsi[i]*B[1,i]+dfdtheta[i]*B[0,i])/tmp
+      dfdz[i]=(-dfdpsi[i]*B[0,i]+dfdtheta[i]*B[1,i])/tmp
 
   return dfdr,dfdz
 
@@ -577,7 +577,7 @@ def gyropot_cpu(comm,summation,mu_arr,qi,mi,ngyro,rz,imu1,imu2,itask1,itask2):
   ntasks=itask2-itask1+1
   gyropot0_l=np.zeros((ntasks,),dtype=float)
   gyrodpot_l=np.zeros((ntasks,),dtype=float)
-  Bmag=np.sqrt(B[:,0]**2+B[:,1]**2+B[:,2]**2)
+  Bmag=np.sqrt(B[0,:]**2+B[1,:]**2+B[2,:]**2)
   for itask in range(itask1,itask2+1):
     imu=int(itask/nnode)
     inode=itask-imu*nnode
@@ -710,7 +710,7 @@ def gyropot_gpu(mu_arr,qi,mi,ngyro,rz,imu1,imu2):
   guess_count_gpu=cp.array(guess_count,dtype=cp.int32).ravel(order='C')
   mapping_gpu=cp.array(mapping,dtype=cp.float64).ravel(order='C')
   nd_gpu=cp.array(nd,dtype=cp.int32).ravel(order='C')
-  Bmag=np.sqrt(B[:,0]**2+B[:,1]**2+B[:,2]**2)
+  Bmag=np.sqrt(B[0,:]**2+B[1,:]**2+B[2,:]**2)
   Bmag_gpu=cp.array(Bmag,dtype=cp.float64)
   rz_gpu=cp.array(rz,dtype=cp.float64).ravel(order='C')
   gyropot0_gpu=cp.zeros((nnode,),dtype=cp.float64)
