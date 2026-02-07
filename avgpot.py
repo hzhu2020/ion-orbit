@@ -15,7 +15,10 @@ for gstep in range(step_start,step_end+dstep,dstep):
   fid=ad.open(fname,'rra')
   pot0=fid.read('pot0')
   dpot=fid.read('dpot')
-  if xgc=='xgc1': dpot=np.mean(dpot,axis=0)
+  if xgc=='xgc1':
+    dpot=np.mean(dpot,axis=0)
+  else:
+    dpot=np.squeeze(dpot)
   fid.close()
   if gstep==step_start:
     nnodes=len(pot0)

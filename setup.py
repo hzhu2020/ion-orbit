@@ -125,6 +125,8 @@ def Pot_init(rank):
   if xgc=='xgc1':
     if rank==0: print('xgc=xgc1, apply toroidal average to dpot.',flush=True)
     dpot=np.mean(dpot,axis=0)
+  else:
+    dpot=np.squeeze(dpot)
   return
 
 def grid_deriv_init():
