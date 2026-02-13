@@ -35,9 +35,9 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
   z_orb1=np.zeros((nt,),dtype=float)
   vp_orb1=np.zeros((nt,),dtype=float)
 
-  r_tmp=np.zeros((np.int(max_step),),dtype=float)
-  z_tmp=np.zeros((np.int(max_step),),dtype=float)
-  vp_tmp=np.zeros((np.int(max_step),),dtype=float)
+  r_tmp=np.zeros((int(max_step),),dtype=float)
+  z_tmp=np.zeros((int(max_step),),dtype=float)
+  vp_tmp=np.zeros((int(max_step),),dtype=float)
 
   tau=0
   step_count=0
@@ -53,7 +53,7 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
     output=open(debug_dir+'/'+str(iorb)+'.txt','w')
     output.write('%8d\n'%0)#a placeholder for debug_count
  
-  for it in range(np.int(max_step*nsteps)):
+  for it in range(int(max_step*nsteps)):
     if np.isnan(r+z):
       if num_cross==1: lost=True
       break
@@ -155,13 +155,13 @@ def calc_orb(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel,determine_los
             z_tmp[it_count]=z_tmp[it_count-1]+(z-z_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
             vp_tmp[it_count]=vp_tmp[it_count-1]+(vp-vp_tmp[it_count-1])*float(nsteps)/float(nsteps_local)
         step_count=min(step_count,nt-1)
-        dt_orb_out=tau/np.float(step_count)
+        dt_orb_out=tau/float(step_count)
         for it2 in range(step_count+1):
           #t_ind should be in the range [0,it_count]
           t_ind=float(it2)*dt_orb_out/dt_orb/float(nsteps)
           wt=t_ind-math.floor(t_ind)
           t_ind=math.floor(t_ind)
-          if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
+          if t_ind==int(max_step)-1: #in case the right point is out of the boundary
             t_ind=t_ind-1
             wt=1.0
           if abs(r_tmp[t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value 
@@ -259,9 +259,9 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
   z_orb1=np.zeros((nt,),dtype=float)
   vp_orb1=np.zeros((nt,),dtype=float)
 
-  r_tmp=np.zeros((np.int(2*max_step),),dtype=float)
-  z_tmp=np.zeros((np.int(2*max_step),),dtype=float)
-  vp_tmp=np.zeros((np.int(2*max_step),),dtype=float)
+  r_tmp=np.zeros((int(2*max_step),),dtype=float)
+  z_tmp=np.zeros((int(2*max_step),),dtype=float)
+  vp_tmp=np.zeros((int(2*max_step),),dtype=float)
 
   tau=np.zeros((2,),dtype=float)
   step_count=0
@@ -278,7 +278,7 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
     output=open(debug_dir+'/'+str(iorb)+'.txt','w')
     output.write('%8d\n'%0)#a placeholder for debug_count
 
-  for it in range(np.int(max_step*nsteps)):
+  for it in range(int(max_step*nsteps)):
     for iloop in range(2):
       if it==0:
         if iloop==0:
@@ -396,7 +396,7 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
                         +(vp-vp_tmp[iloop*int(max_step)+it_count[iloop]-1])*float(nsteps)/float(nsteps_local)
       #end for 2nd iloop
       step_count=min(it_count[0]+it_count[1],nt-1)
-      dt_orb_out=(tau[0]+tau[1])/np.float(step_count)
+      dt_orb_out=(tau[0]+tau[1])/float(step_count)
       for it2 in range(step_count+1):
         tmp=float(it2)*dt_orb_out
         if tmp<tau[0]:
@@ -410,7 +410,7 @@ def calc_orb_2p(calc_gyroE,iorb,r_beg,z_beg,r_end,z_end,mu,Pphi,accel):
           t_ind=tmp/dt_orb/float(nsteps)
           wt=t_ind-math.floor(t_ind)
           t_ind=math.floor(t_ind)
-        if t_ind==np.int(max_step)-1: #in case the right point is out of the boundary
+        if t_ind==int(max_step)-1: #in case the right point is out of the boundary
           t_ind=t_ind-1
           wt=1.0
         if abs(r_tmp[iloop*int(max_step)+t_ind+1])<1E-3: wt=0.0 #in case the right point has not been assgined value
