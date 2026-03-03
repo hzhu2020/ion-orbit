@@ -109,7 +109,8 @@ def Pot_init(rank):
   guess_count=f.read('guess_count')
   guess_list=f.read('guess_list')
   mapping=f.read('mapping')
-  nd=f.read('nd_connect_list')
+  nd=f.read('nd_connect_list')  # 0-based C-indexing
+  nd+=1                         # 1-based Fortran-indexing
   psi_rz=f.read('psi')
   f.close()
   mapping=np.transpose(mapping)
